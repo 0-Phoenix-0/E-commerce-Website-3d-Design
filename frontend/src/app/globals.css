@@ -1,0 +1,428 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  /* Override standard Tailwind colors globally to adapt to Dark Mode dynamically */
+  --color-white: var(--white);
+  --color-gray-50: var(--gray-50);
+  --color-gray-100: var(--gray-100);
+  --color-gray-150: var(--gray-150);
+  --color-gray-200: var(--gray-200);
+  --color-gray-300: var(--gray-300);
+  --color-gray-400: var(--gray-400);
+  --color-gray-500: var(--gray-500);
+  --color-gray-600: var(--gray-600);
+  --color-gray-700: var(--gray-700);
+  --color-gray-800: var(--gray-800);
+  --color-gray-900: var(--gray-900);
+  --color-gray-950: var(--gray-950);
+
+  /* Gold Palette */
+  --color-gold-royal: var(--gold-royal);
+  --color-gold-light: var(--gold-light);
+  --color-gold-dark: var(--gold-dark);
+}
+
+:root {
+  --background: #ffffff;
+  --background-secondary: #f9fafb;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #f59e0b;
+
+  --white: #ffffff;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-150: #eaeaea;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --gray-950: #030712;
+
+  --gold-royal: #D4AF37;
+  --gold-light: #E6C76A;
+  --gold-dark: #9A7B0F;
+}
+
+.dark {
+  --background: #0B0B0B;
+  --background-secondary: #111111;
+  --surface: #202020;
+  --card: #181818;
+  --border: #2B2B2B;
+  --text-primary: #F5F5F5;
+  --text-secondary: #B8B8B8;
+  --text-muted: #7A7A7A;
+  --accent: #D4AF37;
+  --accent-hover: #F4D03F;
+  --danger: #E74C3C;
+  --success: #2ECC71;
+  --warning: #F39C12;
+
+  --white: #181818;
+  --gray-50: #111111;
+  --gray-100: #2B2B2B;
+  --gray-150: #2B2B2B;
+  --gray-200: #2B2B2B;
+  --gray-300: #3A3A3A;
+  --gray-400: #7A7A7A;
+  --gray-500: #B8B8B8;
+  --gray-600: #B8B8B8;
+  --gray-700: #F5F5F5;
+  --gray-800: #F5F5F5;
+  --gray-900: #F5F5F5;
+  --gray-950: #050505;
+
+  --gold-royal: #D4AF37;
+  --gold-light: #E6C76A;
+  --gold-dark: #9A7B0F;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-text-primary);
+    background-color: var(--background);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--background);
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Scrollbar overrides for Dark Mode */
+  .dark::-webkit-scrollbar,
+  .dark *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .dark::-webkit-scrollbar-track,
+  .dark *::-webkit-scrollbar-track {
+    background: #0B0B0B;
+  }
+
+  .dark::-webkit-scrollbar-thumb,
+  .dark *::-webkit-scrollbar-thumb {
+    background: #9A7B0F;
+    border-radius: 4px;
+    border: 2px solid #0B0B0B;
+  }
+
+  .dark::-webkit-scrollbar-thumb:hover,
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background: #D4AF37;
+  }
+
+  /* Global Gold Focus Outline Overrides */
+  .dark input:focus,
+  .dark select:focus,
+  .dark textarea:focus {
+    border-color: #D4AF37 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.25) !important;
+  }
+
+  /* Skeleton shimmer animation override for dark mode */
+  .dark .animate-pulse {
+    background-color: #202020 !important;
+    background-image: linear-gradient(
+      90deg,
+      rgba(24, 24, 24, 0.2) 0px,
+      rgba(43, 43, 43, 0.4) 40px,
+      rgba(24, 24, 24, 0.2) 80px
+    ) !important;
+  }
+}
+
+/* Explicit Specific Dark Mode Element Overrides */
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #F5F5F5 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-950,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #F5F5F5 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: #B8B8B8 !important;
+}
+
+.dark .text-gray-400 {
+  color: #7A7A7A !important;
+}
+
+/* Product Cards & Badges in Dark Mode */
+.dark .bg-blue-600 {
+  background-color: #D4AF37 !important; /* NEW: Royal Gold */
+  color: #0B0B0B !important;
+}
+
+.dark .bg-yellow-600 {
+  background-color: #9A7B0F !important; /* BEST SELLER: Dark Gold */
+  color: #F5F5F5 !important;
+}
+
+.dark .bg-red-500,
+.dark .bg-red-600 {
+  background-color: #E74C3C !important; /* SALE: Red */
+  color: #F5F5F5 !important;
+}
+
+.dark .bg-orange-50 {
+  background-color: #202020 !important;
+  color: #F39C12 !important; /* LOW STOCK: Amber */
+  border: 1px solid #9A7B0F !important;
+}
+
+/* Wishlist Button */
+.dark button[aria-label="Wishlist"] {
+  background-color: #181818 !important;
+  border: 1px solid #2B2B2B !important;
+  color: #B8B8B8 !important;
+}
+
+.dark button[aria-label="Wishlist"]:hover {
+  color: #D4AF37 !important;
+  border-color: #D4AF37 !important;
+  background-color: #202020 !important;
+}
+
+.dark button[aria-label="Wishlist"] svg.fill-red-500 {
+  fill: #D4AF37 !important;
+  color: #D4AF37 !important;
+}
+
+/* Premium Buttons overrides */
+.dark button#add-to-cart-btn,
+.dark button#wishlist-btn,
+.dark button#register-btn,
+.dark button#login-btn,
+.dark button[type="submit"],
+.dark .bg-gray-950,
+.dark .bg-gray-900 {
+  background-color: #050505 !important;
+  border: 1px solid #9A7B0F !important;
+  color: #F5F5F5 !important;
+  transition: all 0.2s ease !important;
+}
+
+.dark button#add-to-cart-btn:hover,
+.dark button#wishlist-btn:hover,
+.dark button#register-btn:hover,
+.dark button#login-btn:hover,
+.dark button[type="submit"]:hover,
+.dark .bg-gray-950:hover,
+.dark .bg-gray-900:hover {
+  border-color: #D4AF37 !important;
+  box-shadow: 0 0 15px rgba(212, 175, 55, 0.35) !important;
+  transform: translateY(-1px);
+  background-color: #111111 !important;
+}
+
+/* Hover glow states on general cards */
+.dark .group:hover {
+  border-color: #9A7B0F !important;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Global blue links, count indicators, accent highlights */
+.dark .text-blue-600,
+.dark .text-blue-650 {
+  color: #D4AF37 !important;
+}
+
+.dark .text-blue-600:hover,
+.dark .text-blue-650:hover {
+  color: #F4D03F !important;
+}
+
+/* Navbar active indicator and links hover states */
+.dark header {
+  background-color: #0B0B0B !important;
+  border-bottom: 1px solid #9A7B0F !important;
+}
+
+.dark header nav a:hover {
+  color: #D4AF37 !important;
+}
+
+/* Inputs and Forms dark mode style settings */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #050505 !important;
+  border-color: #2B2B2B !important;
+  color: #F5F5F5 !important;
+}
+
+.dark input::placeholder,
+.dark select::placeholder,
+.dark textarea::placeholder {
+  color: #7A7A7A !important;
+}
+
+/* Sidebar overrides */
+.dark aside.bg-white {
+  background-color: #111111 !important;
+  border-right-color: #2B2B2B !important;
+}
+
+.dark aside header,
+.dark aside div {
+  border-bottom-color: #2B2B2B !important;
+  border-top-color: #2B2B2B !important;
+}
+
+/* Sidebar active link */
+.dark aside nav a[class*="bg-gray-900"] {
+  background-color: #9A7B0F !important;
+  color: #F5F5F5 !important;
+}
+
+.dark aside nav a[class*="bg-gray-900"] svg {
+  color: #F5F5F5 !important;
+}
+
+.dark aside nav a:hover {
+  background-color: #202020 !important;
+  color: #D4AF37 !important;
+}
+
+/* Table styles */
+.dark table {
+  background-color: #111111 !important;
+}
+
+.dark tr {
+  background-color: #181818 !important;
+  border-bottom: 1px solid #2B2B2B !important;
+}
+
+.dark tr:nth-child(even) {
+  background-color: #151515 !important;
+}
+
+.dark tr:hover {
+  background-color: #202020 !important;
+}
+
+.dark th {
+  background-color: #111111 !important;
+  color: #B8B8B8 !important;
+  border-bottom: 2px solid #2B2B2B !important;
+}
+
+/* Modal and Drawers overlay blur */
+.dark .bg-black\/30,
+.dark .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* StatusBadge overrides */
+.dark .bg-yellow-50 {
+  background-color: #202020 !important;
+  color: #F39C12 !important;
+  border: 1px solid #9A7B0F !important;
+}
+
+.dark .bg-green-50 {
+  background-color: #202020 !important;
+  color: #2ECC71 !important;
+  border: 1px solid rgba(46, 204, 113, 0.3) !important;
+}
+
+.dark .bg-red-50 {
+  background-color: #202020 !important;
+  color: #E74C3C !important;
+  border: 1px solid rgba(231, 76, 60, 0.3) !important;
+}
+
+/* Related items list grid overrides */
+.dark .bg-gray-50\/50 {
+  background-color: #111111 !important;
+}
+
+/* Homepage Hero float badge overlays */
+.dark .bg-white\/95 {
+  background-color: rgba(24, 24, 24, 0.95) !important;
+  border-color: #2B2B2B !important;
+}
+
+.dark .bg-gray-900\/95 {
+  background-color: rgba(11, 11, 11, 0.95) !important;
+  border-color: #9A7B0F !important;
+}
+
+/* Unified Account Hub Layout cards */
+.dark aside[class*="bg-white p-4"] {
+  background-color: #111111 !important;
+  border-color: #2B2B2B !important;
+}
+
+.dark aside[class*="bg-white p-4"] button:hover {
+  background-color: #202020 !important;
+  color: #D4AF37 !important;
+}
+
+/* Tab indicator highlights */
+.dark .border-gray-950 {
+  border-color: #D4AF37 !important;
+}

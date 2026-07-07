@@ -1,0 +1,50 @@
+# Production compose — multi-stage builds, no source mounts, resource limits
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  mongo:
+    restart: always
+    # No host port exposure in production — backend accesses via internal network
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  backend:
+    build:
+      target: production
+    restart: always
+    # No source mounts in production — image is self-contained
+    volumes: !reset []
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+    restart: always
+    volumes: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
