@@ -8,15 +8,15 @@
     "types": [
       "node"
     ],
-    "moduleResolution": "node",
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "ignoreDeprecations": "6.0"
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "ignoreDeprecations": "5.0"
   },
   "include": [
     "src/**/*"
