@@ -15,12 +15,4 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().url('CLIENT_ORIGIN must be a valid URL'),
 });
 
-const parsed = envSchema.safeParse(process.env);
-
-if (!parsed.success) {
-  console.error('❌ Invalid environment variables:');
-  console.error(parsed.error.flatten().fieldErrors);
-  process.exit(1);
-}
-
-export const env = parsed.data;
+export const env = envSchema.parse(process.env);
