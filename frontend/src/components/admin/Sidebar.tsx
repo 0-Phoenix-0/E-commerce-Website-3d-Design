@@ -51,6 +51,15 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    href: '/admin/reviews',
+    label: 'Reviews',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499c.195-.39.687-.39.882 0l2.4 4.88 5.376.78c.43.063.602.585.29.89l-3.89 3.793.917 5.353c.074.43-.377.758-.76.553L12 18.252l-4.81 2.528c-.382.205-.834-.123-.76-.553l.917-5.353-3.89-3.793c-.312-.305-.14-.827.29-.89l5.376-.78 2.4-4.88z" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {

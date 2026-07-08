@@ -19,6 +19,19 @@ export interface Category {
 export interface ProductImage {
   url: string;
   publicId: string;
+  type?: 'image' | 'video';
+}
+
+export interface ProductReview {
+  _id?: string;
+  user?: string;
+  reviewerName: string;
+  rating: number;
+  title?: string;
+  comment: string;
+  date: string;
+  verifiedPurchase?: boolean;
+  images?: { url: string; publicId: string }[];
 }
 
 export interface Product {
@@ -33,6 +46,26 @@ export interface Product {
   stock: number;
   isDeleted: boolean;
   createdAt: string;
+  
+  // New DummyJSON attributes
+  brand?: string;
+  rating?: number;
+  discountPercentage?: number;
+  tags?: string[];
+  availabilityStatus?: string;
+  shippingInformation?: string;
+  returnPolicy?: string;
+  warrantyInformation?: string;
+  minimumOrderQuantity?: number;
+  reviews?: ProductReview[];
+  reviewCount?: number;
+
+  // Badges
+  featured?: boolean;
+  bestSeller?: boolean;
+  trending?: boolean;
+  newArrival?: boolean;
+  onSale?: boolean;
 }
 
 export interface CartItem {

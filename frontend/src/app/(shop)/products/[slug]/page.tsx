@@ -8,8 +8,16 @@ import { api } from '@/lib/api';
 import { useCart } from '@/lib/cart';
 import { useAuth } from '@/lib/auth';
 import { formatCents } from '@/lib/utils';
-import type { Product } from '@/types';
+import type { Product, ProductReview } from '@/types';
 import ProductCard from '@/components/ProductCard';
+
+interface UploadSignData {
+  timestamp: number;
+  signature: string;
+  apiKey: string;
+  cloudName: string;
+  folder: string;
+}
 
 function StockBadge({ stock }: { stock: number }) {
   if (stock === 0)
@@ -53,6 +61,82 @@ export default function ProductDetailPage() {
   // Review Filters
   const [reviewRatingFilter, setReviewRatingFilter] = useState<number>(0);
   const [reviewSort, setReviewSort] = useState<'recent' | 'highest' | 'lowest'>('recent');
+
+  // Write Review Modal States
+  const [showWriteModal, setShowWriteModal] = useState(false);
+  const [writeRating, setWriteRating] = useState(5);
+  const [writeTitle, setWriteTitle] = useState('');
+  const [writeComment, setWriteComment] = useState('');
+  const [writeFiles, setWriteFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  async function handleReviewSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!product) return;
+    setSubmittingReview(true);
+
+    try {
+      let reviewImages: { url: string; publicId: string }[] = [];
+      if (writeFiles.length > 0) {
+        const signRes = await api.post<UploadSignData>('/upload/sign', {});
+        if (!signRes.success || !signRes.data) {
+          throw new Error('Failed to get upload signature');
+        }
+        for (const f of writeFiles) {
+          const form = new FormData();
+          form.append('file', f.file);
+          form.append('api_key', signRes.data.apiKey);
+          form.append('timestamp', String(signRes.data.timestamp));
+          form.append('signature', signRes.data.signature);
+          form.append('folder', signRes.data.folder);
+
+          const uploadRes = await fetch(
+            `https://api.cloudinary.com/v1_1/${signRes.data.cloudName}/image/upload`,
+            { method: 'POST', body: form }
+          );
+          if (!uploadRes.ok) {
+            throw new Error('Image upload failed');
+          }
+          const uploadData = await uploadRes.json() as { secure_url: string; public_id: string };
+          reviewImages.push({
+            url: uploadData.secure_url,
+            publicId: uploadData.public_id
+          });
+        }
+      }
+
+      const res = await api.post<ProductReview[]>(`/products/${product._id}/reviews`, {
+        rating: writeRating,
+        title: writeTitle,
+        comment: writeComment,
+        images: reviewImages
+      });
+
+      if (res.success && res.data) {
+        const rawRes = res as any;
+        setProduct((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            reviews: res.data,
+            rating: typeof rawRes.rating === 'number' ? rawRes.rating : prev.rating,
+            reviewCount: typeof rawRes.reviewCount === 'number' ? rawRes.reviewCount : prev.reviewCount
+          };
+        });
+        setWriteRating(5);
+        setWriteTitle('');
+        setWriteComment('');
+        setWriteFiles([]);
+        setShowWriteModal(false);
+      } else {
+        alert(res.message || 'Failed to submit review');
+      }
+    } catch (err: any) {
+      alert(err.message || 'An error occurred during submission');
+    } finally {
+      setSubmittingReview(false);
+    }
+  }
 
   useEffect(() => {
     api.get<Product>(`/products/slug/${slug}`).then((res) => {
@@ -160,55 +244,39 @@ export default function ProductDetailPage() {
     );
   }
 
-  const images = product.images.length > 0 ? product.images : [{ url: '', publicId: 'empty' }];
+  const images = product.images.length > 0 ? product.images : [{ url: '', publicId: 'empty', type: 'image' as const }];
   const currentImage = images[activeImageIdx];
   const hasDiscount = product.compareAtPrice && product.compareAtPrice > product.price;
   const categoryName = typeof product.category === 'object' ? product.category.name : null;
   const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
 
-  // Generate deterministic details based on ID
-  const code = product._id.charCodeAt(product._id.length - 1);
-  const ratingVal = (3.8 + (code % 13) / 10).toFixed(1);
-  const ratingNum = parseFloat(ratingVal);
-  const reviewsCount = 10 + (code % 150);
-  const brandName = product.name.split(' ')[0] || 'Generic';
+  // Use actual database values, fallback gracefully
+  const ratingNum = product.rating ?? 0;
+  const ratingVal = ratingNum.toFixed(1);
+  const reviewsCount = product.reviews?.length ?? 0;
+  const brandName = product.brand || product.name.split(' ')[0] || 'Generic';
 
-  // Generate deterministic specifications
+  // Generate specifications list using actual database values
   const specs = [
     { label: 'Brand', value: brandName },
-    { label: 'Model Tag', value: `SP-${product._id.substring(18, 24).toUpperCase()}` },
-    { label: 'Weight', value: `${(code % 5) + 1.2} lbs` },
-    { label: 'Dimensions', value: `${(code % 4) + 10} x ${(code % 3) + 6} x ${(code % 2) + 2} in` },
-    { label: 'Warranty', value: code % 2 === 0 ? '1 Year Warranty' : '2 Years Extended Warranty' },
-    { label: 'Origin', value: code % 3 === 0 ? 'Imported' : 'Made in USA' },
+    ...(product.minimumOrderQuantity ? [{ label: 'Minimum Order Quantity', value: String(product.minimumOrderQuantity) }] : []),
+    ...(product.warrantyInformation ? [{ label: 'Warranty', value: product.warrantyInformation }] : []),
+    ...(product.shippingInformation ? [{ label: 'Shipping', value: product.shippingInformation }] : []),
+    ...(product.returnPolicy ? [{ label: 'Return Policy', value: product.returnPolicy }] : []),
+    ...(product.tags && product.tags.length > 0 ? [{ label: 'Tags', value: product.tags.join(', ') }] : []),
   ];
 
-  // Generate deterministic reviews list
-  const reviewAuthors = ['Sarah M.', 'David K.', 'Alex J.', 'Elena R.', 'Marcus L.', 'Emma W.'];
-  const reviewComments = [
-    'Absolutely love this item! Quality is top-notch and exactly as described.',
-    'Decent product for the price. Shipping took a little longer than expected.',
-    'Amazing style and very durable. Recommended!',
-    'Perfect addition to my collection. Will definitely purchase again.',
-    'Good materials used, but the size felt slightly off.',
-    'Exceeded my expectations. Exceptional customer support as well.',
-  ];
-
-  const rawReviews: Review[] = Array.from({ length: 4 }).map((_, idx) => {
-    const authorIdx = (code + idx) % reviewAuthors.length;
-    const commentIdx = (code + idx) % reviewComments.length;
-    const reviewRating = 4 + ((code + idx) % 2); // 4 or 5 stars
-    const dateStr = new Date(Date.now() - (idx * 2 + 1) * 24 * 60 * 60 * 1000).toLocaleDateString();
-
-    return {
-      id: `${product._id}-${idx}`,
-      author: reviewAuthors[authorIdx],
-      rating: reviewRating,
-      date: dateStr,
-      comment: reviewComments[commentIdx],
-      verified: idx % 2 === 0,
-    };
-  });
+  // Map reviews from product schema, or fallback to empty array
+  const rawReviews = (product.reviews || []).map((r) => ({
+    id: r._id || String(Math.random()),
+    author: r.reviewerName,
+    rating: r.rating,
+    title: r.title,
+    date: r.date ? new Date(r.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A',
+    comment: r.comment,
+    verified: r.verifiedPurchase ?? false,
+    images: r.images ?? [],
+  }));
 
   // Apply sorting and filtering on reviews
   const filteredReviews = rawReviews
@@ -216,8 +284,15 @@ export default function ProductDetailPage() {
     .sort((a, b) => {
       if (reviewSort === 'highest') return b.rating - a.rating;
       if (reviewSort === 'lowest') return a.rating - b.rating;
-      return 0; // default recent
+      return new Date(b.date).getTime() - new Date(a.date).getTime(); // recent (newest first)
     });
+
+  // Calculate rating distribution
+  const distribution = [0, 0, 0, 0, 0, 0];
+  product.reviews?.forEach((r) => {
+    const rNum = Math.round(r.rating);
+    if (rNum >= 1 && rNum <= 5) distribution[rNum]++;
+  });
 
   return (
     <div className="bg-white min-h-screen">
@@ -241,21 +316,32 @@ export default function ProductDetailPage() {
         {/* Product details core grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-start">
 
-          {/* Left Column: Interactive Image Gallery */}
+          {/* Left Column: Interactive Media Gallery */}
           <div className="space-y-4">
-            {/* Main Image container with Zoom hover */}
+            {/* Main Media container with Zoom hover */}
             <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
               {currentImage.url ? (
-                <div className="relative w-full h-full overflow-hidden">
-                  <Image
+                currentImage.type === 'video' ? (
+                  <video
                     src={currentImage.url}
-                    alt={product.name}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    className="object-cover transition-transform duration-500 hover:scale-110 cursor-zoom-in"
-                    priority
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    className="w-full h-full object-cover"
                   />
-                </div>
+                ) : (
+                  <div className="relative w-full h-full overflow-hidden">
+                    <Image
+                      src={currentImage.url}
+                      alt={product.name}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      className="object-cover transition-transform duration-500 hover:scale-110 cursor-zoom-in"
+                      priority
+                    />
+                  </div>
+                )
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-200">
                   <svg className="w-24 h-24" fill="none" stroke="currentColor" strokeWidth={0.75} viewBox="0 0 24 24">
@@ -275,19 +361,33 @@ export default function ProductDetailPage() {
             {/* Thumbnail list */}
             {images.length > 1 && (
               <div className="flex gap-3 overflow-x-auto pb-2">
-                {images.map((img, idx) => (
-                  <button
-                    key={img.publicId}
-                    onClick={() => setActiveImageIdx(idx)}
-                    className={`relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 bg-gray-50 transition-all ${
-                      activeImageIdx === idx
-                        ? 'border-gray-950 ring-2 ring-gray-950/10'
-                        : 'border-gray-200 hover:border-gray-400'
-                    }`}
-                  >
-                    <Image src={img.url} alt="" fill className="object-cover" />
-                  </button>
-                ))}
+                {images.map((img, idx) => {
+                  const isVideo = img.type === 'video';
+                  return (
+                    <button
+                      key={img.publicId}
+                      onClick={() => setActiveImageIdx(idx)}
+                      className={`relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 bg-gray-50 transition-all ${
+                        activeImageIdx === idx
+                          ? 'border-gray-950 ring-2 ring-gray-950/10'
+                          : 'border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      {isVideo ? (
+                        <>
+                          <video src={img.url} className="w-full h-full object-cover pointer-events-none" muted />
+                          <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white fill-current" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          </div>
+                        </>
+                      ) : (
+                        <Image src={img.url} alt="" fill className="object-cover" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -331,15 +431,55 @@ export default function ProductDetailPage() {
                 <>
                   <span className="text-lg text-gray-400 line-through font-semibold">{formatCents(product.compareAtPrice!)}</span>
                   <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded">
-                    Save {Math.round((1 - product.price / product.compareAtPrice!) * 100)}%
+                    Save {product.discountPercentage ?? Math.round((1 - product.price / product.compareAtPrice!) * 100)}%
                   </span>
                 </>
               )}
             </div>
 
             {/* Inventory level Stock Badge */}
-            <div className="mb-6">
+            <div className="mb-4">
               <StockBadge stock={product.stock} />
+            </div>
+
+            {/* Key product info list (Brand, Warranty, Shipping, return, min quantity, availability status) */}
+            <div className="grid grid-cols-2 gap-4 border-t border-b border-gray-100 py-4 mb-6 text-xs sm:text-sm text-gray-600">
+              {brandName && (
+                <div>
+                  <span className="font-semibold text-gray-400">Brand:</span>{' '}
+                  <span className="font-bold text-gray-900">{brandName}</span>
+                </div>
+              )}
+              {product.availabilityStatus && (
+                <div>
+                  <span className="font-semibold text-gray-400">Availability:</span>{' '}
+                  <span className="font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded text-[11px]">{product.availabilityStatus}</span>
+                </div>
+              )}
+              {product.warrantyInformation && (
+                <div>
+                  <span className="font-semibold text-gray-400">Warranty:</span>{' '}
+                  <span className="text-gray-700">{product.warrantyInformation}</span>
+                </div>
+              )}
+              {product.shippingInformation && (
+                <div>
+                  <span className="font-semibold text-gray-400">Shipping:</span>{' '}
+                  <span className="text-gray-700">{product.shippingInformation}</span>
+                </div>
+              )}
+              {product.returnPolicy && (
+                <div>
+                  <span className="font-semibold text-gray-400">Returns:</span>{' '}
+                  <span className="text-gray-700">{product.returnPolicy}</span>
+                </div>
+              )}
+              {product.minimumOrderQuantity !== undefined && (
+                <div>
+                  <span className="font-semibold text-gray-400">Min. Order:</span>{' '}
+                  <span className="text-gray-700">{product.minimumOrderQuantity} units</span>
+                </div>
+              )}
             </div>
 
             {/* Action Bar: Cart notification messages */}
@@ -490,8 +630,50 @@ export default function ProductDetailPage() {
             )}
 
             {activeTab === 'reviews' && (
-              <div className="space-y-6">
-                
+              <div className="space-y-8">
+                {/* Rating Breakdown & Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 rounded-2xl p-6 border border-gray-150">
+                  {/* Left Column: Overall stats */}
+                  <div className="flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-200/80 pb-6 md:pb-0 md:pr-6">
+                    <span className="text-5xl font-black text-gray-950 tracking-tight mb-2">
+                      {ratingVal}
+                    </span>
+                    <div className="flex text-yellow-450 mb-2">
+                      {[...Array(5)].map((_, i) => (
+                        <svg
+                          key={i}
+                          className={`w-4 h-4 ${i < Math.round(ratingNum) ? 'fill-current' : 'text-gray-200'}`}
+                          viewBox="0 0 20 20"
+                          fill={i < Math.round(ratingNum) ? 'currentColor' : 'none'}
+                          stroke="currentColor"
+                        >
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      {reviewsCount} Customer Reviews
+                    </span>
+                  </div>
+
+                  {/* Middle Column: Rating distribution */}
+                  <div className="col-span-2 flex flex-col justify-center space-y-2">
+                    {[5, 4, 3, 2, 1].map((stars) => {
+                      const count = distribution[stars];
+                      const pct = reviewsCount > 0 ? (count / reviewsCount) * 100 : 0;
+                      return (
+                        <div key={stars} className="flex items-center gap-3 text-xs font-bold text-gray-500">
+                          <span className="w-12 text-right shrink-0">{stars} Stars</span>
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="bg-yellow-450 h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="w-8 shrink-0 text-gray-400">{Math.round(pct)}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Reviews filter settings bar */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-gray-100 pb-5">
                   <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -504,59 +686,222 @@ export default function ProductDetailPage() {
                       <option value="0">All Reviews</option>
                       <option value="5">5 Stars only</option>
                       <option value="4">4 Stars only</option>
+                      <option value="3">3 Stars only</option>
+                      <option value="2">2 Stars only</option>
+                      <option value="1">1 Star only</option>
                     </select>
                   </div>
-                  
-                  <div className="flex items-center gap-4 w-full sm:w-auto">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider shrink-0">Sort reviews</span>
+
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                     <select
                       value={reviewSort}
                       onChange={(e) => setReviewSort(e.target.value as any)}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold focus:border-gray-950 focus:outline-none transition-colors"
+                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold focus:border-gray-950 focus:outline-none transition-colors mr-2"
                     >
                       <option value="recent">Most Recent</option>
                       <option value="highest">Highest Rated</option>
                       <option value="lowest">Lowest Rated</option>
                     </select>
+
+                    {user ? (
+                      <button
+                        onClick={() => setShowWriteModal(true)}
+                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-bold transition-all active:scale-95 shadow-sm uppercase tracking-wider shrink-0"
+                      >
+                        Write a Review
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/login?next=/products/${product.slug}`}
+                        className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-xs font-bold transition-all inline-block uppercase tracking-wider shrink-0"
+                      >
+                        Log in to Review
+                      </Link>
+                    )}
                   </div>
                 </div>
 
                 {/* Review cards */}
                 {filteredReviews.length === 0 ? (
-                  <p className="text-gray-450 italic py-6">No matching reviews found for this filter selection.</p>
+                  <p className="text-gray-450 italic py-6">No matching reviews found for this selection.</p>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6">
                     {filteredReviews.map((rev) => (
-                      <div key={rev.id} className="border border-gray-150 bg-white rounded-2xl p-5 shadow-sm/5 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-950">{rev.author}</span>
+                      <div key={rev.id} className="border border-gray-150 bg-white rounded-2xl p-6 shadow-sm/5 space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-gray-950">{rev.author}</span>
+                            {rev.verified && (
+                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-wider">
+                                Verified Purchase
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] text-gray-400 font-semibold">{rev.date}</span>
                         </div>
 
-                        {/* Stars */}
-                        <div className="flex text-yellow-450">
-                          {[...Array(5)].map((_, i) => (
-                            <svg
-                              key={i}
-                              className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-gray-200'}`}
-                              viewBox="0 0 20 20"
-                              fill={i < rev.rating ? 'currentColor' : 'none'}
-                              stroke="currentColor"
-                            >
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                          ))}
+                        {/* Stars & Title */}
+                        <div className="flex items-center gap-3">
+                          <div className="flex text-yellow-450">
+                            {[...Array(5)].map((_, i) => (
+                              <svg
+                                key={i}
+                                className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-gray-200'}`}
+                                viewBox="0 0 20 20"
+                                fill={i < rev.rating ? 'currentColor' : 'none'}
+                                stroke="currentColor"
+                              >
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                            ))}
+                          </div>
+                          {rev.title && (
+                            <span className="font-bold text-gray-900 text-sm">
+                              {rev.title}
+                            </span>
+                          )}
                         </div>
 
-                        <p className="text-gray-500 text-xs sm:text-sm">{rev.comment}</p>
-                        
-                        {rev.verified && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                            Verified Purchase
-                          </span>
+                        <p className="text-gray-650 text-sm">{rev.comment}</p>
+
+                        {/* Review Images */}
+                        {rev.images && rev.images.length > 0 && (
+                          <div className="flex gap-2.5 pt-2">
+                            {rev.images.map((img: any, i: number) => (
+                              <a
+                                key={i}
+                                href={img.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 transition-transform hover:scale-105"
+                              >
+                                <Image src={img.url} alt="" fill className="object-cover" />
+                              </a>
+                            ))}
+                          </div>
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Write Review Modal Overlay */}
+                {showWriteModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={() => setShowWriteModal(false)} />
+                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 text-left">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">Write a Product Review</h3>
+                      
+                      <form onSubmit={handleReviewSubmit} className="space-y-4">
+                        {/* Rating Selection */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Rating</label>
+                          <div className="flex gap-1.5">
+                            {[1, 2, 3, 4, 5].map((stars) => (
+                              <button
+                                type="button"
+                                key={stars}
+                                onClick={() => setWriteRating(stars)}
+                                className={`p-0.5 transition-colors ${stars <= writeRating ? 'text-yellow-450' : 'text-gray-200'}`}
+                              >
+                                <svg className="w-8 h-8 fill-current" viewBox="0 0 20 20" stroke="currentColor">
+                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                </svg>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Title */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Review Title</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Amazing quality, highly recommended!"
+                            value={writeTitle}
+                            onChange={(e) => setWriteTitle(e.target.value)}
+                            className="block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-gray-950 focus:outline-none transition-colors"
+                          />
+                        </div>
+
+                        {/* Comment */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Comments</label>
+                          <textarea
+                            rows={4}
+                            required
+                            placeholder="Share your experience with this product..."
+                            value={writeComment}
+                            onChange={(e) => setWriteComment(e.target.value)}
+                            className="block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-gray-950 focus:outline-none transition-colors resize-none"
+                          />
+                        </div>
+
+                        {/* Review Images */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                            Upload Review Images <span className="text-gray-300 font-normal">(optional)</span>
+                          </label>
+                          {writeFiles.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2 mb-2">
+                              {writeFiles.map((wf, idx) => (
+                                <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-250 bg-gray-50">
+                                  <Image src={wf.preview} alt="" fill className="object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => setWriteFiles(writeFiles.filter((_, i) => i !== idx))}
+                                    className="absolute top-1 right-1 p-0.5 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                    title="Remove"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <label className="block w-full py-2 text-center rounded-lg border border-dashed border-gray-300 text-xs font-bold text-gray-550 hover:border-gray-400 hover:text-gray-700 transition-colors cursor-pointer select-none">
+                            <span>➕ Add Review Images</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []);
+                                const newItems = files.map((file) => ({
+                                  file,
+                                  preview: URL.createObjectURL(file),
+                                }));
+                                setWriteFiles((prev) => [...prev, ...newItems]);
+                              }}
+                            />
+                          </label>
+                        </div>
+
+                        {/* Modal Footer buttons */}
+                        <div className="flex gap-3 justify-end pt-2">
+                          <button
+                            type="button"
+                            disabled={submittingReview}
+                            onClick={() => setShowWriteModal(false)}
+                            className="px-4 py-2 border border-gray-300 text-gray-750 font-semibold rounded-lg text-xs uppercase tracking-wider hover:bg-gray-50 transition-colors disabled:opacity-40"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={submittingReview}
+                            className="px-4 py-2 bg-gray-900 text-white font-bold rounded-lg text-xs uppercase tracking-wider hover:bg-gray-800 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                          >
+                            {submittingReview && <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                            Submit Review
+                          </button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
                 )}
               </div>
@@ -566,9 +911,14 @@ export default function ProductDetailPage() {
               <div className="space-y-4">
                 <p className="font-semibold text-gray-900 text-base">Shipping & Returns Information</p>
                 <div className="text-gray-500 space-y-2">
+                  {product.shippingInformation && (
+                    <p>• <strong>Shipping Info:</strong> {product.shippingInformation}</p>
+                  )}
+                  {product.returnPolicy && (
+                    <p>• <strong>Return Policy:</strong> {product.returnPolicy}</p>
+                  )}
                   <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding $75.</p>
                   <p>• Standard shipping takes approximately 3-5 business days depending on delivery address.</p>
-                  <p>• Express shipping alternatives are available in the check-out flow for priority deliveries.</p>
                   <p>• We offer a comprehensive <strong>30-day return policy</strong>. Items must be returned in their original packaging and condition to qualify for standard refunds.</p>
                 </div>
               </div>

@@ -69,7 +69,7 @@ function ProductsContent() {
     api.get<Product[]>('/products?limit=100').then((res) => {
       if (res.success && res.data) {
         const uniqueBrands = Array.from(
-          new Set(res.data.map((p) => p.name.split(' ')[0]))
+          new Set(res.data.map((p) => p.brand || p.name.split(' ')[0]))
         ).filter(Boolean);
         setBrands(uniqueBrands);
       }
@@ -81,51 +81,18 @@ function ProductsContent() {
       setLoading(true);
       const params = new URLSearchParams({ limit: '12', sort, page: String(p) });
       
-      // Combine search query and brand name for text-based backend retrieval
-      const searchTerms = [q.trim(), selectedBrand].filter(Boolean).join(' ');
-      if (searchTerms) params.set('q', searchTerms);
-      
+      if (q.trim()) params.set('q', q.trim());
+      if (selectedBrand) params.set('brand', selectedBrand);
       if (categoryId) params.set('category', categoryId);
       if (minPrice) params.set('minPrice', String(Math.round(parseFloat(minPrice) * 100)));
       if (maxPrice) params.set('maxPrice', String(Math.round(parseFloat(maxPrice) * 100)));
+      if (availability && availability !== 'all') params.set('availability', availability);
+      if (minRating > 0) params.set('rating', String(minRating));
+      if (onlyDiscounted) params.set('onlyDiscounted', 'true');
 
       const res = await api.get<Product[]>(`/products?${params.toString()}`);
       if (res.success) {
-        let list = res.data ?? [];
-        
-        // Availability client-side filter
-        if (availability !== 'all') {
-          list = list.filter((prod) =>
-            availability === 'in-stock' ? prod.stock > 0 : prod.stock === 0
-          );
-        }
-
-        // Rating client-side filter
-        if (minRating > 0) {
-          list = list.filter((prod) => {
-            const code = prod._id.charCodeAt(prod._id.length - 1);
-            const rating = 3.8 + (code % 13) / 10;
-            return rating >= minRating;
-          });
-        }
-
-        // Discount client-side filter
-        if (onlyDiscounted) {
-          list = list.filter((prod) => prod.compareAtPrice && prod.compareAtPrice > prod.price);
-        }
-
-        // Handle rating sorting on frontend if selected
-        if (sort === 'rating_desc') {
-          list = [...list].sort((a, b) => {
-            const codeA = a._id.charCodeAt(a._id.length - 1);
-            const ratingA = 3.8 + (codeA % 13) / 10;
-            const codeB = b._id.charCodeAt(b._id.length - 1);
-            const ratingB = 3.8 + (codeB % 13) / 10;
-            return ratingB - ratingA;
-          });
-        }
-
-        setProducts(list);
+        setProducts(res.data ?? []);
         setTotal(res.total ?? 0);
         setPages(res.pages ?? 1);
       }

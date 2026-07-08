@@ -23,21 +23,21 @@ export default function ProductCard({ product }: Props) {
   const [togglingWishlist, setTogglingWishlist] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
 
-  const primaryImage = product.images[0];
-  const hoverImage = product.images[1] || null;
+  const imagesOnly = (product.images || []).filter((img) => img.type !== 'video');
+  const primaryImage = imagesOnly[0];
+  const hoverImage = imagesOnly[1] || null;
   const hasDiscount = product.compareAtPrice && product.compareAtPrice > product.price;
   
   // Calculate discount percentage
-  const discountPercent = hasDiscount
+  const discountPercent = product.discountPercentage ?? (hasDiscount
     ? Math.round((1 - product.price / product.compareAtPrice!) * 100)
-    : 0;
+    : 0);
 
   const categoryName = typeof product.category === 'object' ? product.category.name : null;
 
-  // Generate deterministic stats for rating/badge
-  const code = product._id.charCodeAt(product._id.length - 1);
-  const ratingNum = 3.8 + (code % 13) / 10;
-  const reviewsCount = 10 + (code % 150);
+  // Use actual database properties for rating/reviews
+  const ratingNum = product.rating ?? 0;
+  const reviewsCount = product.reviews?.length ?? 0;
 
   // Check wishlist state on mount if user is logged in
   useEffect(() => {
@@ -75,12 +75,17 @@ export default function ProductCard({ product }: Props) {
     setAddingToCart(false);
   }
 
-  // Deterministic badges
+  // Support actual database badge tags
   let badgeText = '';
-  if (hasDiscount) badgeText = 'SALE';
-  else if (code % 7 === 0) badgeText = 'NEW';
-  else if (code % 5 === 0) badgeText = 'BEST SELLER';
+  if (product.onSale || hasDiscount) badgeText = 'SALE';
+  else if (product.bestSeller) badgeText = 'BEST SELLER';
+  else if (product.newArrival) badgeText = 'NEW';
+  else if (product.featured) badgeText = 'FEATURED';
+  else if (product.trending) badgeText = 'TRENDING';
   else if (product.stock > 0 && product.stock <= 5) badgeText = 'LIMITED';
+
+  // Support stock availability text
+  const availabilityText = product.availabilityStatus || (product.stock === 0 ? 'Out of Stock' : product.stock <= 5 ? `Only ${product.stock} left` : 'In Stock');
 
   return (
     <Link
@@ -123,7 +128,9 @@ export default function ProductCard({ product }: Props) {
           <span className={`absolute top-3 left-3 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm text-white ${
             badgeText === 'SALE' ? 'bg-red-500' :
             badgeText === 'NEW' ? 'bg-blue-600' :
-            badgeText === 'BEST SELLER' ? 'bg-yellow-600' : 'bg-gray-800'
+            badgeText === 'BEST SELLER' ? 'bg-yellow-600' :
+            badgeText === 'FEATURED' ? 'bg-purple-600' :
+            badgeText === 'TRENDING' ? 'bg-orange-500' : 'bg-gray-800'
           }`}>
             {badgeText}
           </span>
@@ -169,9 +176,14 @@ export default function ProductCard({ product }: Props) {
 
       {/* Info Panel */}
       <div className="p-4 space-y-1.5">
-        {categoryName && (
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{categoryName}</p>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          {categoryName && (
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{categoryName}</p>
+          )}
+          {product.brand && (
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest leading-none truncate max-w-[120px]" title={product.brand}>{product.brand}</p>
+          )}
+        </div>
         
         <h3 className="text-sm font-semibold text-gray-900 line-clamp-1 group-hover:text-blue-600 transition-colors leading-tight">
           {product.name}
@@ -209,16 +221,15 @@ export default function ProductCard({ product }: Props) {
           </div>
           
           {/* Stock Level text */}
-          {product.stock > 0 && product.stock <= 5 && (
-            <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
-              Only {product.stock} left
-            </span>
-          )}
-          {product.stock > 5 && (
-            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded">
-              In Stock
-            </span>
-          )}
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+            product.stock === 0
+              ? 'text-red-650 bg-red-50'
+              : product.stock <= 5
+              ? 'text-orange-600 bg-orange-50'
+              : 'text-green-600 bg-green-50'
+          }`}>
+            {availabilityText}
+          </span>
         </div>
       </div>
     </Link>
