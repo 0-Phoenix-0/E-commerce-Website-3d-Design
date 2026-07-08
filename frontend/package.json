@@ -11,13 +11,15 @@
   "dependencies": {
     "next": "16.2.10",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.185.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "16.2.10",
     "postcss": "^8.5.1",

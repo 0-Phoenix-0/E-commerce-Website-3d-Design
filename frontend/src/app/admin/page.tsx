@@ -13,6 +13,12 @@ interface Stats {
   totalOrders: number;
   totalRevenue: number;
   recentOrders: (Order & { user: User })[];
+  threeDStats?: {
+    productsWith3D: number;
+    productsWithout3D: number;
+    modelsProcessing: number;
+    failedModels: number;
+  };
 }
 
 interface StatCardProps {
@@ -73,6 +79,27 @@ export default function AdminDashboard() {
         <StatCard label="Categories"        value={stats.totalCategories}             href="/admin/categories" />
         <StatCard label="Total Orders"      value={stats.totalOrders}                 href="/admin/orders" />
         <StatCard label="Revenue"           value={formatCents(stats.totalRevenue)}   href="/admin/orders" />
+      </div>
+
+      {/* 3D Model Stats */}
+      <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">3D Models Infrastructure</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Products with 3D</p>
+          <p className="mt-2 text-3xl font-extrabold text-indigo-600 tracking-tight">{stats.threeDStats?.productsWith3D ?? 0}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Products without 3D</p>
+          <p className="mt-2 text-3xl font-extrabold text-gray-900 tracking-tight">{stats.threeDStats?.productsWithout3D ?? 0}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Models Processing</p>
+          <p className="mt-2 text-3xl font-extrabold text-yellow-600 tracking-tight">{stats.threeDStats?.modelsProcessing ?? 0}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Failed Models</p>
+          <p className="mt-2 text-3xl font-extrabold text-red-600 tracking-tight">{stats.threeDStats?.failedModels ?? 0}</p>
+        </div>
       </div>
 
       {/* Recent Orders */}

@@ -14,21 +14,41 @@ export async function getStats(
   next: NextFunction
 ): Promise<void> {
   try {
-    const [totalProducts, totalCategories, totalOrders, revenueResult, recentOrders] =
-      await Promise.all([
-        Product.countDocuments({ isDeleted: false }),
-        Category.countDocuments({ isDeleted: false }),
-        Order.countDocuments(),
-        Order.aggregate([
-          { $match: { status: { $ne: 'cancelled' } } },
-          { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-        ]),
-        Order.find()
-          .sort({ createdAt: -1 })
-          .limit(8)
-          .populate('user', 'name email')
-          .lean(),
-      ]);
+    const [
+      totalProducts,
+      totalCategories,
+      totalOrders,
+      revenueResult,
+      recentOrders,
+      productsWith3D,
+      productsWithout3D,
+      modelsProcessing,
+      failedModels,
+    ] = await Promise.all([
+      Product.countDocuments({ isDeleted: false }),
+      Category.countDocuments({ isDeleted: false }),
+      Order.countDocuments(),
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' } } },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+      ]),
+      Order.find()
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .populate('user', 'name email')
+        .lean(),
+      Product.countDocuments({ isDeleted: false, 'threeD.enabled': true, 'threeD.status': 'ready' }),
+      Product.countDocuments({
+        isDeleted: false,
+        $or: [
+          { 'threeD.enabled': { $ne: true } },
+          { 'threeD.status': { $ne: 'ready' } },
+          { threeD: { $exists: false } },
+        ],
+      }),
+      Product.countDocuments({ isDeleted: false, 'threeD.status': 'processing' }),
+      Product.countDocuments({ isDeleted: false, 'threeD.status': 'failed' }),
+    ]);
 
     res.json({
       success: true,
@@ -38,6 +58,12 @@ export async function getStats(
         totalOrders,
         totalRevenue: (revenueResult[0]?.total as number) ?? 0,
         recentOrders,
+        threeDStats: {
+          productsWith3D,
+          productsWithout3D,
+          modelsProcessing,
+          failedModels,
+        },
       },
     });
   } catch (err) {

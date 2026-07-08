@@ -48,3 +48,22 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  ai-service:
+    restart: always
+    volumes: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

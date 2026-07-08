@@ -9,6 +9,7 @@ import { useCart } from '@/lib/cart';
 import { api } from '@/lib/api';
 import { formatCents } from '@/lib/utils';
 import type { Product } from '@/types';
+import ThreeDBadge from './threeD/ThreeDBadge';
 
 interface Props {
   product: Product;
@@ -134,6 +135,14 @@ export default function ProductCard({ product }: Props) {
           }`}>
             {badgeText}
           </span>
+        )}
+
+        {/* 3D Available Badge */}
+        {product.threeD?.enabled && product.threeD?.status === 'ready' && (
+          <ThreeDBadge
+            className={`absolute left-3 z-10 ${badgeText ? 'top-10' : 'top-3'}`}
+            size="sm"
+          />
         )}
 
         {/* Wishlist Button Overlay */}

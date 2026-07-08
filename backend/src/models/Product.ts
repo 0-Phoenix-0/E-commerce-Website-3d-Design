@@ -49,6 +49,30 @@ export interface IProduct extends Document {
   trending?: boolean;
   newArrival?: boolean;
   onSale?: boolean;
+  threeD?: IThreeDModel;
+}
+
+export interface IThreeDModel {
+  enabled: boolean;
+  status: 'none' | 'processing' | 'ready' | 'failed';
+  engine: string | null;
+  version: string | null;
+  modelUrl: string | null;
+  thumbnailUrl: string | null;
+  previewImage: string | null;
+  generatedAt: Date | null;
+  imageHash: string | null;
+  generationTime: number | null;
+  fileSize: number | null;
+  gpuUsed?: string | null;
+  vramUsage?: number | null;
+  textureResolution?: string | null;
+  estimatedTime?: number | null;
+  error?: string | null;
+  meshStats?: {
+    vertices: number;
+    faces: number;
+  } | null;
 }
 
 const reviewSchema = new Schema<IProductReview>({
@@ -104,6 +128,54 @@ const productSchema = new Schema<IProduct>(
     trending: { type: Boolean, default: false },
     newArrival: { type: Boolean, default: false },
     onSale: { type: Boolean, default: false },
+
+    // 3D Model Metadata
+    threeD: {
+      type: new Schema<IThreeDModel>({
+        enabled: { type: Boolean, default: false },
+        status: { type: String, enum: ['none', 'processing', 'ready', 'failed'], default: 'none' },
+        engine: { type: String, default: null },
+        version: { type: String, default: null },
+        modelUrl: { type: String, default: null },
+        thumbnailUrl: { type: String, default: null },
+        previewImage: { type: String, default: null },
+        generatedAt: { type: Date, default: null },
+        imageHash: { type: String, default: null },
+        generationTime: { type: Number, default: null },
+        fileSize: { type: Number, default: null },
+        gpuUsed: { type: String, default: null },
+        vramUsage: { type: Number, default: null },
+        textureResolution: { type: String, default: null },
+        estimatedTime: { type: Number, default: null },
+        error: { type: String, default: null },
+        meshStats: {
+          type: {
+            vertices: { type: Number, default: 0 },
+            faces: { type: Number, default: 0 }
+          },
+          default: null
+        }
+      }, { _id: false }),
+      default: () => ({
+        enabled: false,
+        status: 'none',
+        engine: null,
+        version: null,
+        modelUrl: null,
+        thumbnailUrl: null,
+        previewImage: null,
+        generatedAt: null,
+        imageHash: null,
+        generationTime: null,
+        fileSize: null,
+        gpuUsed: null,
+        vramUsage: null,
+        textureResolution: null,
+        estimatedTime: null,
+        error: null,
+        meshStats: null
+      })
+    }
   },
   { timestamps: true }
 );

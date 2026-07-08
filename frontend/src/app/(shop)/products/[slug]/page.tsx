@@ -10,6 +10,8 @@ import { useAuth } from '@/lib/auth';
 import { formatCents } from '@/lib/utils';
 import type { Product, ProductReview } from '@/types';
 import ProductCard from '@/components/ProductCard';
+import ThreeDViewer from '@/components/threeD/ThreeDViewer';
+import ThreeDStatus from '@/components/threeD/ThreeDStatus';
 
 interface UploadSignData {
   timestamp: number;
@@ -207,6 +209,54 @@ export default function ProductDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  // Poll 3D model status if currently processing
+  useEffect(() => {
+    if (!product || product.threeD?.status !== 'processing') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get<Product>(`/products/slug/${slug}`);
+        if (res.success && res.data) {
+          if (
+            res.data.threeD?.status !== product.threeD?.status ||
+            res.data.threeD?.estimatedTime !== product.threeD?.estimatedTime ||
+            res.data.threeD?.modelUrl !== product.threeD?.modelUrl
+          ) {
+            setProduct(res.data);
+          }
+        }
+      } catch (err) {
+        console.error('Error polling 3D generation status:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [product, slug]);
+
+  async function handleStartOnDemand3D() {
+    if (!product) return;
+    try {
+      const res = await api.post<any>(`/products/${product._id}/3d/generate`, {});
+      if (res.success && res.data) {
+        setProduct({
+          ...product,
+          threeD: res.data
+        });
+      }
+    } catch (err) {
+      console.error('Failed to trigger on-demand generation:', err);
+    }
+  }
+
+  const calcThreeDProgress = () => {
+    if (!product?.threeD) return 0;
+    if (product.threeD.status === 'ready') return 100;
+    if (product.threeD.status !== 'processing') return 0;
+    const est = product.threeD.estimatedTime ?? 30;
+    const ratio = Math.max(0, Math.min(1, (30 - est) / 30));
+    return Math.round(10 + ratio * 85);
+  };
+
   // Loading skeleton
   if (loading) {
     return (
@@ -390,6 +440,34 @@ export default function ProductDetailPage() {
                 })}
               </div>
             )}
+
+            {/* 3D Viewer Section */}
+            <div className="mt-8 pt-6 border-t border-gray-150">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                  </svg>
+                  3D Viewer
+                </h2>
+                {product.threeD?.enabled && product.threeD?.status === 'ready' && (
+                  <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-600 uppercase tracking-wide">
+                    Ready
+                  </span>
+                )}
+              </div>
+
+              {product.threeD?.enabled && product.threeD?.status === 'ready' ? (
+                <ThreeDViewer modelUrl={product.threeD.modelUrl} previewImage={product.threeD.previewImage} />
+              ) : (
+                <ThreeDStatus
+                  status={product.threeD?.status ?? 'none'}
+                  progress={calcThreeDProgress()}
+                  onViewClick={handleStartOnDemand3D}
+                />
+              )}
+            </div>
+
           </div>
 
           {/* Right Column: Information details */}

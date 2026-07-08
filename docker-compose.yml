@@ -68,8 +68,35 @@ services:
     networks:
       - ecommerce_net
 
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: ecommerce_ai_service
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      BACKEND_URL: http://backend:5000
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-three-d-ai-internal-bypass-key}
+      AUTO_GENERATE_3D: ${AUTO_GENERATE_3D:-true}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service:/app
+      - pytorch_cache:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ecommerce_net
+
 volumes:
   mongo_data:
+  pytorch_cache:
 
 networks:
   ecommerce_net:

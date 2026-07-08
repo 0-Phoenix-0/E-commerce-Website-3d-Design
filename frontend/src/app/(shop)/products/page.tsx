@@ -33,6 +33,7 @@ function ProductsContent() {
   const [availability, setAvailability] = useState<'all' | 'in-stock' | 'out-of-stock'>('all');
   const [minRating, setMinRating] = useState<number>(0);
   const [onlyDiscounted, setOnlyDiscounted] = useState(false);
+  const [hasThreeD, setHasThreeD] = useState(searchParams.get('hasThreeD') === 'true');
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -52,6 +53,7 @@ function ProductsContent() {
     if (selectedBrand) params.brand = selectedBrand;
     if (sort !== 'newest') params.sort = sort;
     if (page > 1) params.page = String(page);
+    if (hasThreeD) params.hasThreeD = 'true';
     
     Object.entries(overrides).forEach(([k, v]) => {
       if (v !== '' && v !== 0) params[k] = String(v);
@@ -89,6 +91,7 @@ function ProductsContent() {
       if (availability && availability !== 'all') params.set('availability', availability);
       if (minRating > 0) params.set('rating', String(minRating));
       if (onlyDiscounted) params.set('onlyDiscounted', 'true');
+      if (hasThreeD) params.set('hasThreeD', 'true');
 
       const res = await api.get<Product[]>(`/products?${params.toString()}`);
       if (res.success) {
@@ -98,14 +101,14 @@ function ProductsContent() {
       }
       setLoading(false);
     },
-    [q, selectedBrand, categoryId, minPrice, maxPrice, sort, page, availability, minRating, onlyDiscounted]
+    [q, selectedBrand, categoryId, minPrice, maxPrice, sort, page, availability, minRating, onlyDiscounted, hasThreeD]
   );
 
   useEffect(() => {
     fetchProducts(page);
     router.replace(`/products?${buildQuery()}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, selectedBrand, categoryId, minPrice, maxPrice, sort, page, availability, minRating, onlyDiscounted]);
+  }, [q, selectedBrand, categoryId, minPrice, maxPrice, sort, page, availability, minRating, onlyDiscounted, hasThreeD]);
 
   function clearFilters() {
     setQ('');
@@ -116,6 +119,7 @@ function ProductsContent() {
     setAvailability('all');
     setMinRating(0);
     setOnlyDiscounted(false);
+    setHasThreeD(false);
     setSort('newest');
     setPage(1);
     setFiltersOpen(false);
@@ -130,6 +134,7 @@ function ProductsContent() {
     availability !== 'all' ||
     minRating > 0 ||
     onlyDiscounted ||
+    hasThreeD ||
     sort !== 'newest'
   );
 
@@ -267,6 +272,20 @@ function ProductsContent() {
           type="checkbox"
           checked={onlyDiscounted}
           onChange={(e) => { setOnlyDiscounted(e.target.checked); setPage(1); }}
+          className="w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900 focus:ring-0 cursor-pointer"
+        />
+      </div>
+
+      {/* 3D Model filter toggle */}
+      <div className="flex items-center justify-between border-t border-gray-100 pt-4">
+        <label htmlFor="hasThreeD" className="text-xs font-bold text-gray-900 uppercase tracking-widest cursor-pointer select-none">
+          Has 3D Model
+        </label>
+        <input
+          id="hasThreeD"
+          type="checkbox"
+          checked={hasThreeD}
+          onChange={(e) => { setHasThreeD(e.target.checked); setPage(1); }}
           className="w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900 focus:ring-0 cursor-pointer"
         />
       </div>

@@ -53,3 +53,19 @@ export function requireAdmin(
   }
   next();
 }
+
+export async function adminOrInternalService(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const secretHeader = req.headers['x-ai-secret'];
+  if (secretHeader && secretHeader === env.INTERNAL_SECRET) {
+    return next();
+  }
+  
+  await protect(req, res, (err) => {
+    if (err) return next(err);
+    requireAdmin(req, res, next);
+  });
+}

@@ -91,6 +91,103 @@ export default function ProductModal({ product, categories, onClose, onSaved }: 
   const [minimumOrderQuantity, setMinimumOrderQuantity] = useState(product ? String(product.minimumOrderQuantity ?? '1') : '1');
   const [reviews, setReviews] = useState<ProductReview[]>(product?.reviews ?? []);
 
+  // 3D Model States
+  const [threeDEnabled, setThreeDEnabled] = useState(product?.threeD?.enabled ?? false);
+  const [threeDStatus, setThreeDStatus] = useState<string>(product?.threeD?.status ?? 'none');
+  const [threeDEngine, setThreeDEngine] = useState(product?.threeD?.engine ?? '');
+  const [threeDVersion, setThreeDVersion] = useState(product?.threeD?.version ?? '');
+  const [threeDModelUrl, setThreeDModelUrl] = useState(product?.threeD?.modelUrl ?? '');
+  const [threeDThumbnailUrl, setThreeDThumbnailUrl] = useState(product?.threeD?.thumbnailUrl ?? '');
+  const [threeDPreviewImage, setThreeDPreviewImage] = useState(product?.threeD?.previewImage ?? '');
+  const [threeDGeneratedAt, setThreeDGeneratedAt] = useState<string | null>(product?.threeD?.generatedAt ? String(product.threeD.generatedAt) : null);
+  const [threeDImageHash, setThreeDImageHash] = useState(product?.threeD?.imageHash ?? '');
+  const [threeDGenerationTime, setThreeDGenerationTime] = useState(product?.threeD?.generationTime ? String(product.threeD.generationTime) : '');
+  const [threeDFileSize, setThreeDFileSize] = useState(product?.threeD?.fileSize ? String(product.threeD.fileSize) : '');
+  const [threeDGpuUsed, setThreeDGpuUsed] = useState(product?.threeD?.gpuUsed ?? '');
+  const [threeDVramUsage, setThreeDVramUsage] = useState(product?.threeD?.vramUsage ? String(product.threeD.vramUsage) : '');
+  const [threeDTextureResolution, setThreeDTextureResolution] = useState(product?.threeD?.textureResolution ?? '');
+  const [threeDEstimatedTime, setThreeDEstimatedTime] = useState(product?.threeD?.estimatedTime ? String(product.threeD.estimatedTime) : '');
+  const [threeDError, setThreeDError] = useState(product?.threeD?.error ?? '');
+  const [threeDVertices, setThreeDVertices] = useState(product?.threeD?.meshStats?.vertices ? String(product.threeD.meshStats.vertices) : '');
+  const [threeDFaces, setThreeDFaces] = useState(product?.threeD?.meshStats?.faces ? String(product.threeD.meshStats.faces) : '');
+
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerate(force = false) {
+    if (!product?._id) {
+      alert("Please save/create the product first before triggering manual 3D generation.");
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await api.post<{ status: string }>(`/products/${product._id}/3d/generate`, { force });
+      if (res.success) {
+        setThreeDStatus('processing');
+        setThreeDError('');
+        alert(force ? 'Regeneration job queued.' : 'Generation job queued.');
+      } else {
+        alert('Failed: ' + res.message);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleDeleteModel() {
+    if (!product?._id) {
+      setThreeDEnabled(false);
+      setThreeDStatus('none');
+      setThreeDEngine('');
+      setThreeDVersion('');
+      setThreeDModelUrl('');
+      setThreeDThumbnailUrl('');
+      setThreeDPreviewImage('');
+      setThreeDGeneratedAt(null);
+      setThreeDImageHash('');
+      setThreeDGenerationTime('');
+      setThreeDFileSize('');
+      setThreeDGpuUsed('');
+      setThreeDVramUsage('');
+      setThreeDTextureResolution('');
+      setThreeDEstimatedTime('');
+      setThreeDError('');
+      setThreeDVertices('');
+      setThreeDFaces('');
+      return;
+    }
+    
+    if (!confirm('Are you sure you want to delete the 3D model and its metadata?')) return;
+    try {
+      const res = await api.delete(`/products/${product._id}/3d`);
+      if (res.success) {
+        setThreeDEnabled(false);
+        setThreeDStatus('none');
+        setThreeDEngine('');
+        setThreeDVersion('');
+        setThreeDModelUrl('');
+        setThreeDThumbnailUrl('');
+        setThreeDPreviewImage('');
+        setThreeDGeneratedAt(null);
+        setThreeDImageHash('');
+        setThreeDGenerationTime('');
+        setThreeDFileSize('');
+        setThreeDGpuUsed('');
+        setThreeDVramUsage('');
+        setThreeDTextureResolution('');
+        setThreeDEstimatedTime('');
+        setThreeDError('');
+        setThreeDVertices('');
+        setThreeDFaces('');
+      } else {
+        alert('Failed to delete: ' + res.message);
+      }
+    } catch (err: any) {
+      alert('Error deleting: ' + err.message);
+    }
+  }
+
   // Badge States
   const [featured, setFeatured] = useState(product?.featured ?? false);
   const [bestSeller, setBestSeller] = useState(product?.bestSeller ?? false);
@@ -190,6 +287,28 @@ export default function ProductModal({ product, categories, onClose, onSaved }: 
       trending,
       newArrival,
       onSale,
+      threeD: {
+        enabled: threeDEnabled,
+        status: threeDStatus,
+        engine: threeDEngine.trim() || null,
+        version: threeDVersion.trim() || null,
+        modelUrl: threeDModelUrl.trim() || null,
+        thumbnailUrl: threeDThumbnailUrl.trim() || null,
+        previewImage: threeDPreviewImage.trim() || null,
+        generatedAt: threeDGeneratedAt,
+        imageHash: threeDImageHash.trim() || null,
+        generationTime: threeDGenerationTime ? parseFloat(threeDGenerationTime) : null,
+        fileSize: threeDFileSize ? parseInt(threeDFileSize, 10) : null,
+        gpuUsed: threeDGpuUsed.trim() || null,
+        vramUsage: threeDVramUsage ? parseFloat(threeDVramUsage) : null,
+        textureResolution: threeDTextureResolution.trim() || null,
+        estimatedTime: threeDEstimatedTime ? parseFloat(threeDEstimatedTime) : null,
+        error: threeDError.trim() || null,
+        meshStats: threeDVertices && threeDFaces ? {
+          vertices: parseInt(threeDVertices, 10),
+          faces: parseInt(threeDFaces, 10)
+        } : null
+      }
     };
 
     const res = isEditing
@@ -447,6 +566,287 @@ export default function ProductModal({ product, categories, onClose, onSaved }: 
                   {badge.label}
                 </label>
               ))}
+            </div>
+          </div>
+
+          {/* 3D Model Configuration Section */}
+          <div className="border-t border-gray-100 pt-4 mt-2">
+            <h3 className="block text-sm font-semibold text-gray-800 mb-3">3D Model Infrastructure</h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+              
+              {/* Enable checkbox & Status */}
+              <div className="grid grid-cols-2 gap-3 items-center">
+                <label className="flex items-center gap-2 text-xs font-semibold text-gray-750 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={threeDEnabled}
+                    onChange={(e) => setThreeDEnabled(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  />
+                  Enable 3D Model
+                </label>
+                <div>
+                  <label htmlFor="threed-status" className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Current Status</label>
+                  <select
+                    id="threed-status"
+                    value={threeDStatus}
+                    onChange={(e) => setThreeDStatus(e.target.value)}
+                    className="block w-full rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none bg-white text-gray-800"
+                  >
+                    <option value="none">none</option>
+                    <option value="processing">processing</option>
+                    <option value="ready">ready</option>
+                    <option value="failed">failed</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Engine & Version */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="threed-engine" className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Engine</label>
+                  <input
+                    id="threed-engine"
+                    type="text"
+                    placeholder="e.g. Hunyuan3D"
+                    value={threeDEngine}
+                    onChange={(e) => setThreeDEngine(e.target.value)}
+                    className="block w-full rounded-lg border border-gray-300 px-2 py-1 text-xs bg-white text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="threed-version" className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Version</label>
+                  <input
+                    id="threed-version"
+                    type="text"
+                    placeholder="e.g. v1.0"
+                    value={threeDVersion}
+                    onChange={(e) => setThreeDVersion(e.target.value)}
+                    className="block w-full rounded-lg border border-gray-300 px-2 py-1 text-xs bg-white text-gray-800"
+                  />
+                </div>
+              </div>
+
+              {/* Model URL & Thumbnail URL */}
+              <div className="space-y-2">
+                <div>
+                  <label htmlFor="threed-model-url" className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Model GLB URL</label>
+                  <input
+                    id="threed-model-url"
+                    type="text"
+                    placeholder="https://example.com/model.glb"
+                    value={threeDModelUrl}
+                    onChange={(e) => setThreeDModelUrl(e.target.value)}
+                    className="block w-full rounded-lg border border-gray-300 px-2 py-1 text-xs bg-white text-gray-800"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label htmlFor="threed-thumb-url" className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Thumbnail URL</label>
+                    <input
+                      id="threed-thumb-url"
+                      type="text"
+                      placeholder="https://example.com/thumb.jpg"
+                      value={threeDThumbnailUrl}
+                      onChange={(e) => setThreeDThumbnailUrl(e.target.value)}
+                      className="block w-full rounded-lg border border-gray-300 px-2 py-1 text-xs bg-white text-gray-800"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="threed-preview-url" className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Preview Image URL</label>
+                    <input
+                      id="threed-preview-url"
+                      type="text"
+                      placeholder="https://example.com/preview.jpg"
+                      value={threeDPreviewImage}
+                      onChange={(e) => setThreeDPreviewImage(e.target.value)}
+                      className="block w-full rounded-lg border border-gray-300 px-2 py-1 text-xs bg-white text-gray-800"
+                    />
+                  </div>
+                </div>
+              </div>
+                     {/* Detailed Metrics Panel */}
+              <div className="grid grid-cols-3 gap-x-2 gap-y-3 text-[10px] text-gray-550 bg-white p-3 rounded-lg border border-gray-150">
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">Gen Date</span>
+                  <span className="text-gray-800 font-medium truncate block">
+                    {threeDGeneratedAt ? new Date(threeDGeneratedAt).toLocaleDateString() : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">Model Size</span>
+                  <input
+                    type="number"
+                    placeholder="Bytes"
+                    value={threeDFileSize}
+                    onChange={(e) => setThreeDFileSize(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                  />
+                </div>
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">Image Hash</span>
+                  <input
+                    type="text"
+                    placeholder="sha256"
+                    value={threeDImageHash}
+                    onChange={(e) => setThreeDImageHash(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                  />
+                </div>
+
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">GPU Used</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. RTX 5060 Ti"
+                    value={threeDGpuUsed}
+                    onChange={(e) => setThreeDGpuUsed(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">VRAM Consumed</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 4.2 GB"
+                    value={threeDVramUsage}
+                    onChange={(e) => setThreeDVramUsage(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                  />
+                </div>
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">Texture Res</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 1024x1024"
+                    value={threeDTextureResolution}
+                    onChange={(e) => setThreeDTextureResolution(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                  />
+                </div>
+
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">Gen Time</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 12.5s"
+                    value={threeDGenerationTime}
+                    onChange={(e) => setThreeDGenerationTime(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                  />
+                </div>
+                <div>
+                  <span className="font-bold block text-gray-400 uppercase tracking-wide">Est. Remaining</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 30s"
+                    value={threeDEstimatedTime}
+                    onChange={(e) => setThreeDEstimatedTime(e.target.value)}
+                    className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <span className="font-bold block text-gray-400 uppercase tracking-wide">Verts</span>
+                    <input
+                      type="text"
+                      placeholder="0"
+                      value={threeDVertices}
+                      onChange={(e) => setThreeDVertices(e.target.value)}
+                      className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                    />
+                  </div>
+                  <div>
+                    <span className="font-bold block text-gray-400 uppercase tracking-wide">Faces</span>
+                    <input
+                      type="text"
+                      placeholder="0"
+                      value={threeDFaces}
+                      onChange={(e) => setThreeDFaces(e.target.value)}
+                      className="w-full bg-transparent border-none p-0 focus:ring-0 text-[10px] text-gray-800 font-medium font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Display Card */}
+              {threeDError && (
+                <div className="bg-red-50 border border-red-150 rounded-lg p-2.5 text-[10px] text-red-700 font-medium space-y-1">
+                  <span className="font-bold block text-red-500 uppercase tracking-wide">Pipeline Error Log</span>
+                  <p className="font-mono text-xs whitespace-pre-wrap max-h-20 overflow-y-auto">{threeDError}</p>
+                </div>
+              )}
+
+              {/* Thumbnail Display */}
+              {threeDThumbnailUrl && (
+                <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-gray-150">
+                  <div className="relative w-12 h-12 rounded overflow-hidden border shrink-0 bg-gray-50">
+                    <img src={threeDThumbnailUrl} alt="3D Model Thumbnail" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  </div>
+                  <div className="text-[10px] text-gray-400 truncate">
+                    <span className="font-semibold block text-gray-500 uppercase">Preview</span>
+                    {threeDThumbnailUrl}
+                  </div>
+                </div>
+              )}
+
+              {/* Toolbar Buttons: Generate, Delete, Download */}
+              <div className="flex gap-2 pt-1.5">
+                <button
+                  type="button"
+                  disabled={generating || !product?._id || (threeDStatus !== 'none' && threeDStatus !== 'failed')}
+                  onClick={() => handleGenerate(false)}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                    !product?._id || (threeDStatus !== 'none' && threeDStatus !== 'failed')
+                      ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-650 border border-blue-700 text-white hover:bg-blue-700 cursor-pointer'
+                  }`}
+                >
+                  Generate Model
+                </button>
+
+                <button
+                  type="button"
+                  disabled={generating || !product?._id || (threeDStatus !== 'ready' && threeDStatus !== 'failed')}
+                  onClick={() => handleGenerate(true)}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                    !product?._id || (threeDStatus !== 'ready' && threeDStatus !== 'failed')
+                      ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                  }`}
+                >
+                  Regenerate
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDeleteModel}
+                  className="py-1.5 px-3 rounded-lg border border-red-200 text-red-650 hover:bg-red-50 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Delete Model
+                </button>
+
+                {threeDModelUrl ? (
+                  <a
+                    href={threeDModelUrl}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-1.5 px-3 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 hover:bg-indigo-100 text-xs font-bold text-center transition-all flex items-center justify-center cursor-pointer"
+                  >
+                    Download
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="py-1.5 px-3 rounded-lg bg-gray-100 border border-gray-200 text-gray-400 text-xs font-bold cursor-not-allowed select-none"
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+
             </div>
           </div>
 

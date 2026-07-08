@@ -13,6 +13,9 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY is required'),
   CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET is required'),
   CLIENT_ORIGIN: z.string().url('CLIENT_ORIGIN must be a valid URL'),
+  AI_SERVICE_URL: z.string().url().default('http://localhost:8000'),
+  INTERNAL_SECRET: z.string().default('three-d-ai-internal-bypass-key'),
+  AUTO_GENERATE_3D: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
 });
 
 export const env = envSchema.parse(process.env);

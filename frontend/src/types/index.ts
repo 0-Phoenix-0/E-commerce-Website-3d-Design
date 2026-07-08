@@ -66,6 +66,30 @@ export interface Product {
   trending?: boolean;
   newArrival?: boolean;
   onSale?: boolean;
+  threeD?: ThreeDModel;
+}
+
+export interface ThreeDModel {
+  enabled: boolean;
+  status: 'none' | 'processing' | 'ready' | 'failed';
+  engine: string | null;
+  version: string | null;
+  modelUrl: string | null;
+  thumbnailUrl: string | null;
+  previewImage: string | null;
+  generatedAt: string | null;
+  imageHash: string | null;
+  generationTime: number | null;
+  fileSize: number | null;
+  gpuUsed?: string | null;
+  vramUsage?: number | null;
+  textureResolution?: string | null;
+  estimatedTime?: number | null;
+  error?: string | null;
+  meshStats?: {
+    vertices: number;
+    faces: number;
+  } | null;
 }
 
 export interface CartItem {

@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { Product } from '../models/Product';
 import { Category } from '../models/Category';
 import { Order } from '../models/Order';
 import { AppError } from '../middleware/AppError';
 import { v2 as cloudinary } from 'cloudinary';
+import { env } from '../config/env';
 
 function slugify(text: string): string {
   return text
@@ -67,7 +69,66 @@ const productBody = z.object({
   trending: z.boolean().optional().default(false),
   newArrival: z.boolean().optional().default(false),
   onSale: z.boolean().optional().default(false),
+  threeD: z
+    .object({
+      enabled: z.boolean().default(false),
+      status: z.enum(['none', 'processing', 'ready', 'failed']).default('none'),
+      engine: z.string().nullable().optional(),
+      version: z.string().nullable().optional(),
+      modelUrl: z.string().nullable().optional(),
+      thumbnailUrl: z.string().nullable().optional(),
+      previewImage: z.string().nullable().optional(),
+      generatedAt: z.preprocess((val) => (val ? new Date(val as any) : null), z.date().nullable()).optional(),
+      imageHash: z.string().nullable().optional(),
+      generationTime: z.number().nullable().optional(),
+      fileSize: z.number().nullable().optional(),
+      gpuUsed: z.string().nullable().optional(),
+      vramUsage: z.number().nullable().optional(),
+      textureResolution: z.string().nullable().optional(),
+      estimatedTime: z.number().nullable().optional(),
+      error: z.string().nullable().optional(),
+      meshStats: z
+        .object({
+          vertices: z.number(),
+          faces: z.number(),
+        })
+        .nullable()
+        .optional(),
+    })
+    .optional(),
 });
+
+function getImagesHash(images: any[]): string {
+  if (!images || images.length === 0) return '';
+  const sortedUrls = [...images].map((img) => img.url).sort();
+  return crypto.createHash('sha256').update(sortedUrls.join('|')).digest('hex');
+}
+
+function triggerThreeDGeneration(productId: string, imageUrls: string[]) {
+  fetch(`${env.AI_SERVICE_URL}/api/v1/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-ai-secret': env.INTERNAL_SECRET,
+    },
+    body: JSON.stringify({
+      product_id: productId,
+      image_urls: imageUrls,
+      quality: 'standard',
+      texture_resolution: '1024x1024',
+      force: false,
+    }),
+  }).catch((err) => {
+    console.error('Failed to notify FastAPI AI service:', err);
+    Product.findOneAndUpdate(
+      { _id: productId },
+      {
+        'threeD.status': 'failed',
+        'threeD.error': `AI Service unreachable: ${err.message}`,
+      }
+    ).exec();
+  });
+}
 
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -81,6 +142,7 @@ const listQuerySchema = z.object({
   availability: z.enum(['all', 'in-stock', 'out-of-stock']).optional(),
   rating: z.coerce.number().min(0).optional(),
   onlyDiscounted: z.preprocess((val) => val === 'true' || val === true, z.boolean()).optional(),
+  hasThreeD: z.preprocess((val) => val === 'true' || val === true, z.boolean()).optional(),
 });
 
 export async function getProducts(
@@ -95,7 +157,7 @@ export async function getProducts(
       return;
     }
 
-    const { page, limit, category, q, minPrice, maxPrice, sort, brand, availability, rating, onlyDiscounted } = parsed.data;
+    const { page, limit, category, q, minPrice, maxPrice, sort, brand, availability, rating, onlyDiscounted, hasThreeD } = parsed.data;
 
     const filter: Record<string, any> = { isDeleted: false };
 
@@ -112,6 +174,10 @@ export async function getProducts(
     if (onlyDiscounted) {
       filter.compareAtPrice = { $exists: true, $ne: null };
       filter.$expr = { $gt: ['$compareAtPrice', '$price'] };
+    }
+    if (hasThreeD) {
+      filter['threeD.enabled'] = true;
+      filter['threeD.status'] = 'ready';
     }
 
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -223,7 +289,66 @@ export async function createProduct(
     const conflict = await Product.findOne({ slug: baseSlug });
     const slug = conflict ? `${baseSlug}-${Date.now()}` : baseSlug;
 
-    const product = await Product.create({ ...data, slug });
+    // Build initial product document
+    const product = new Product({ ...data, slug });
+
+    // ── AI Cache & Auto Gen Checks ─────────────────────────────────────────
+    const images = data.images || [];
+    if (images.length > 0) {
+      const imageHash = getImagesHash(images);
+
+      // Check cache
+      const cachedProduct = await Product.findOne({
+        isDeleted: false,
+        'threeD.imageHash': imageHash,
+        'threeD.status': 'ready',
+      }).lean();
+
+      if (cachedProduct && cachedProduct.threeD) {
+        product.threeD = {
+          enabled: data.threeD?.enabled ?? true,
+          status: 'ready',
+          engine: cachedProduct.threeD.engine,
+          version: cachedProduct.threeD.version,
+          modelUrl: cachedProduct.threeD.modelUrl,
+          thumbnailUrl: cachedProduct.threeD.thumbnailUrl,
+          previewImage: cachedProduct.threeD.previewImage,
+          generatedAt: new Date(),
+          imageHash: imageHash,
+          generationTime: cachedProduct.threeD.generationTime,
+          fileSize: cachedProduct.threeD.fileSize,
+          gpuUsed: (cachedProduct.threeD as any).gpuUsed,
+          vramUsage: (cachedProduct.threeD as any).vramUsage,
+          textureResolution: (cachedProduct.threeD as any).textureResolution,
+          meshStats: (cachedProduct.threeD as any).meshStats,
+          error: null,
+        };
+      } else if (env.AUTO_GENERATE_3D) {
+        product.threeD = {
+          enabled: data.threeD?.enabled ?? true,
+          status: 'processing',
+          engine: null,
+          version: null,
+          modelUrl: null,
+          thumbnailUrl: null,
+          previewImage: null,
+          generatedAt: null,
+          imageHash: imageHash,
+          generationTime: null,
+          fileSize: null,
+          gpuUsed: null,
+          vramUsage: null,
+          textureResolution: null,
+          estimatedTime: 30,
+          error: null,
+          meshStats: null,
+        };
+        // Queue task after product is inserted
+        setTimeout(() => triggerThreeDGeneration(product._id.toString(), images.map((img) => img.url)), 100);
+      }
+    }
+
+    await product.save();
     const populated = await product.populate('category', 'name slug');
     res.status(201).json({ success: true, data: populated });
   } catch (err) {
@@ -270,8 +395,101 @@ export async function updateProduct(
       product.slug = conflict ? `${baseSlug}-${Date.now()}` : baseSlug;
     }
 
+    // ── AI Cache & Hash Check ────────────────────────────────────────────────
+    const oldImages = product.images || [];
+    const newImages = data.images || [];
+    const oldHash = getImagesHash(oldImages);
+    const newHash = getImagesHash(newImages);
+
+    let triggerGen = false;
+
+    if (newImages.length > 0 && oldHash !== newHash) {
+      // Images changed! Delete old model from storage
+      if (product.threeD?.modelUrl) {
+        fetch(`${env.AI_SERVICE_URL}/api/v1/delete/${product._id}`, {
+          method: 'DELETE',
+          headers: { 'x-ai-secret': env.INTERNAL_SECRET },
+        }).catch((err) => console.error('Failed to notify AI service of deletion:', err));
+      }
+
+      // Check cache
+      const cachedProduct = await Product.findOne({
+        _id: { $ne: product._id },
+        isDeleted: false,
+        'threeD.imageHash': newHash,
+        'threeD.status': 'ready',
+      }).lean();
+
+      if (cachedProduct && cachedProduct.threeD) {
+        data.threeD = {
+          enabled: data.threeD?.enabled ?? true,
+          status: 'ready',
+          engine: cachedProduct.threeD.engine,
+          version: cachedProduct.threeD.version,
+          modelUrl: cachedProduct.threeD.modelUrl,
+          thumbnailUrl: cachedProduct.threeD.thumbnailUrl,
+          previewImage: cachedProduct.threeD.previewImage,
+          generatedAt: new Date(),
+          imageHash: newHash,
+          generationTime: cachedProduct.threeD.generationTime,
+          fileSize: cachedProduct.threeD.fileSize,
+          gpuUsed: (cachedProduct.threeD as any).gpuUsed,
+          vramUsage: (cachedProduct.threeD as any).vramUsage,
+          textureResolution: (cachedProduct.threeD as any).textureResolution,
+          meshStats: (cachedProduct.threeD as any).meshStats,
+          error: null,
+        } as any;
+      } else if (env.AUTO_GENERATE_3D) {
+        data.threeD = {
+          enabled: data.threeD?.enabled ?? true,
+          status: 'processing',
+          engine: null,
+          version: null,
+          modelUrl: null,
+          thumbnailUrl: null,
+          previewImage: null,
+          generatedAt: null,
+          imageHash: newHash,
+          generationTime: null,
+          fileSize: null,
+          gpuUsed: null,
+          vramUsage: null,
+          textureResolution: null,
+          estimatedTime: 30,
+          error: null,
+          meshStats: null,
+        } as any;
+        triggerGen = true;
+      } else {
+        data.threeD = {
+          enabled: data.threeD?.enabled ?? false,
+          status: 'none',
+          engine: null,
+          version: null,
+          modelUrl: null,
+          thumbnailUrl: null,
+          previewImage: null,
+          generatedAt: null,
+          imageHash: newHash,
+          generationTime: null,
+          fileSize: null,
+          gpuUsed: null,
+          vramUsage: null,
+          textureResolution: null,
+          estimatedTime: null,
+          error: null,
+          meshStats: null,
+        } as any;
+      }
+    }
+
     Object.assign(product, data);
     await product.save();
+
+    if (triggerGen) {
+      triggerThreeDGeneration(product._id.toString(), newImages.map((img) => img.url));
+    }
+
     const populated = await product.populate('category', 'name slug');
     res.json({ success: true, data: populated });
   } catch (err) {
