@@ -348,6 +348,9 @@ export async function createProduct(
       }
     }
 
+    // Seed price history with the initial price point
+    product.priceHistory = [{ price: product.price, date: new Date() }];
+
     await product.save();
     const populated = await product.populate('category', 'name slug');
     res.status(201).json({ success: true, data: populated });
@@ -481,6 +484,14 @@ export async function updateProduct(
           meshStats: null,
         } as any;
       }
+    }
+
+    // Record a price-history point whenever the price actually changes
+    if (data.price !== product.price) {
+      if (!product.priceHistory || product.priceHistory.length === 0) {
+        product.priceHistory = [{ price: product.price, date: product.createdAt }];
+      }
+      product.priceHistory.push({ price: data.price, date: new Date() });
     }
 
     Object.assign(product, data);

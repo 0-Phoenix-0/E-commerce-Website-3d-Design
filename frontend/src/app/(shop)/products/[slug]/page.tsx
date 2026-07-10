@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import ProductCard from '@/components/ProductCard';
 import ThreeDViewer from '@/components/threeD/ThreeDViewer';
 import ThreeDStatus from '@/components/threeD/ThreeDStatus';
 import TryOnModal from '@/components/tryOn/TryOnModal';
+import PriceHistoryChart from '@/components/PriceHistoryChart';
 
 interface UploadSignData {
   timestamp: number;
@@ -60,7 +61,26 @@ export default function ProductDetailPage() {
   
   // Gallery, Zoom, Tabs
   const [activeImageIdx, setActiveImageIdx] = useState(0);
-  const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'reviews' | 'shipping'>('description');
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryZoom, setGalleryZoom] = useState(false);
+  const galleryScrollRef = useRef<HTMLDivElement>(null);
+
+  // Center the zoomed image within its scroll container
+  function toggleGalleryZoom() {
+    setGalleryZoom((z) => {
+      const next = !z;
+      if (next) {
+        requestAnimationFrame(() => {
+          const el = galleryScrollRef.current;
+          if (!el) return;
+          el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+          el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+        });
+      }
+      return next;
+    });
+  }
+  const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'priceHistory' | 'reviews' | 'shipping'>('description');
   const [related, setRelated] = useState<Product[]>([]);
   const [copied, setCopied] = useState(false);
 
@@ -220,6 +240,40 @@ export default function ProductDetailPage() {
     }
     setShowTryOn(true);
   }
+
+  // Fullscreen gallery navigation
+  function openGallery(idx: number) {
+    setActiveImageIdx(idx);
+    setGalleryZoom(false);
+    setGalleryOpen(true);
+  }
+
+  function galleryStep(delta: number) {
+    setGalleryZoom(false);
+    setActiveImageIdx((prev) => {
+      const count = product?.images.length ?? 0;
+      if (count === 0) return prev;
+      return (prev + delta + count) % count;
+    });
+  }
+
+  // Keyboard nav + scroll lock for the fullscreen gallery
+  useEffect(() => {
+    if (!galleryOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setGalleryOpen(false);
+      else if (e.key === 'ArrowRight') galleryStep(1);
+      else if (e.key === 'ArrowLeft') galleryStep(-1);
+    }
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galleryOpen, product?.images.length]);
 
   // Poll 3D model status if currently processing
   useEffect(() => {
@@ -393,15 +447,25 @@ export default function ProductDetailPage() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="relative w-full h-full overflow-hidden">
+                  <div
+                    className="relative w-full h-full overflow-hidden cursor-zoom-in"
+                    onClick={() => openGallery(activeImageIdx)}
+                  >
                     <Image
                       src={currentImage.url}
                       alt={product.name}
                       fill
                       sizes="(max-width: 768px) 100vw, 50vw"
-                      className="object-cover transition-transform duration-500 hover:scale-110 cursor-zoom-in"
+                      className="object-cover transition-transform duration-500 hover:scale-110"
                       priority
                     />
+                    {/* Zoom / expand hint */}
+                    <span className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-black/55 text-white text-[11px] font-semibold px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.35-5.4a6.75 6.75 0 11-13.5 0 6.75 6.75 0 0113.5 0zM10.5 7.5v6m3-3h-6" />
+                      </svg>
+                      Click to zoom
+                    </span>
                   </div>
                 )
               ) : (
@@ -531,6 +595,20 @@ export default function ProductDetailPage() {
             <div className="mb-4">
               <StockBadge stock={product.stock} />
             </div>
+
+            {/* Price history / forecast quick link */}
+            <button
+              onClick={() => {
+                setActiveTab('priceHistory');
+                document.getElementById('product-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="mb-6 inline-flex items-center gap-2 self-start text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 14l4-4 3 3 5-6" />
+              </svg>
+              View price history &amp; forecast
+            </button>
 
             {/* Key product info list (Brand, Warranty, Shipping, return, min quantity, availability status) */}
             <div className="grid grid-cols-2 gap-4 border-t border-b border-gray-100 py-4 mb-6 text-xs sm:text-sm text-gray-600">
@@ -680,13 +758,14 @@ export default function ProductDetailPage() {
         </div>
 
         {/* Tabbed Specs, Description, and Reviews */}
-        <div className="mt-16 border-t border-gray-150 pt-10">
+        <div id="product-tabs" className="mt-16 border-t border-gray-150 pt-10">
           <div className="flex border-b border-gray-100 mb-8 overflow-x-auto">
             <div className="flex space-x-8">
               {(
                 [
                   { id: 'description', label: 'Description' },
                   { id: 'specifications', label: 'Specifications' },
+                  { id: 'priceHistory', label: 'Price History' },
                   { id: 'reviews', label: 'Reviews' },
                   { id: 'shipping', label: 'Shipping & Returns' },
                 ] as const
@@ -728,6 +807,10 @@ export default function ProductDetailPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {activeTab === 'priceHistory' && (
+              <PriceHistoryChart product={product} />
             )}
 
             {activeTab === 'reviews' && (
@@ -1043,6 +1126,118 @@ export default function ProductDetailPage() {
         {showTryOn && <TryOnModal product={product} onClose={() => setShowTryOn(false)} />}
 
       </div>
+
+      {/* Fullscreen product gallery: zoom + prev/next */}
+      {galleryOpen && currentImage.url && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90">
+          {/* Backdrop click closes */}
+          <div className="absolute inset-0" onClick={() => setGalleryOpen(false)} />
+
+          {/* Close */}
+          <button
+            onClick={() => setGalleryOpen(false)}
+            aria-label="Close"
+            className="absolute top-4 right-4 z-10 p-2 text-white/80 hover:text-white transition-colors"
+          >
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* Prev */}
+          {images.length > 1 && (
+            <button
+              onClick={() => galleryStep(-1)}
+              aria-label="Previous"
+              className="absolute left-3 sm:left-6 z-10 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+          )}
+
+          {/* Media */}
+          <div ref={galleryScrollRef} className="gallery-no-scrollbar relative z-[1] max-w-[92vw] max-h-[84vh] overflow-auto">
+            {currentImage.type === 'video' ? (
+              <video
+                key={currentImage.url}
+                src={currentImage.url}
+                controls
+                autoPlay
+                loop
+                className="gallery-fade max-w-[92vw] max-h-[84vh] object-contain"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={currentImage.url}
+                src={currentImage.url}
+                alt={product.name}
+                onClick={toggleGalleryZoom}
+                className={`select-none transition-all duration-300 ease-out ${
+                  galleryZoom
+                    ? 'max-w-none max-h-none w-[150%] sm:w-[120%] h-auto cursor-zoom-out'
+                    : 'gallery-fade max-w-[92vw] max-h-[84vh] object-contain cursor-zoom-in'
+                }`}
+              />
+            )}
+          </div>
+
+          {/* Next */}
+          {images.length > 1 && (
+            <button
+              onClick={() => galleryStep(1)}
+              aria-label="Next"
+              className="absolute right-3 sm:right-6 z-10 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          )}
+
+          {/* Thumbnail strip + counter */}
+          <div className="absolute bottom-4 left-0 right-0 z-10 flex flex-col items-center gap-3 px-4">
+            {images.length > 1 && (
+              <div className="gallery-no-scrollbar flex gap-2 overflow-x-auto max-w-full pb-1">
+                {images.map((img, idx) => (
+                  <button
+                    key={img.publicId}
+                    onClick={() => {
+                      setGalleryZoom(false);
+                      setActiveImageIdx(idx);
+                    }}
+                    className={`relative w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-colors ${
+                      activeImageIdx === idx ? 'border-white' : 'border-white/25 hover:border-white/60'
+                    }`}
+                  >
+                    {img.type === 'video' ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <video src={img.url} className="w-full h-full object-cover" muted />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <svg className="w-4 h-4 text-white fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        </span>
+                      </>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <span className="text-white/70 text-xs font-semibold">
+              {activeImageIdx + 1} / {images.length}
+              {currentImage.type !== 'video' && (
+                <span className="text-white/40 font-normal"> · click image to {galleryZoom ? 'zoom out' : 'zoom in'}</span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

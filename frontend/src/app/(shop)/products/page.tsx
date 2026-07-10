@@ -62,6 +62,19 @@ function ProductsContent() {
     return new URLSearchParams(params).toString();
   }, [q, categoryId, minPrice, maxPrice, selectedBrand, sort, page]);
 
+  // Sync state from URL when search params change (e.g. new search from Navbar
+  // while already on this page — component does not remount, so init state is stale)
+  useEffect(() => {
+    setQ(searchParams.get('q') ?? '');
+    setCategoryId(searchParams.get('category') ?? '');
+    setMinPrice(searchParams.get('minPrice') ?? '');
+    setMaxPrice(searchParams.get('maxPrice') ?? '');
+    setSelectedBrand(searchParams.get('brand') ?? '');
+    setSort((searchParams.get('sort') as SortOption) ?? 'newest');
+    setHasThreeD(searchParams.get('hasThreeD') === 'true');
+    setPage(Number(searchParams.get('page') ?? '1'));
+  }, [searchParams]);
+
   // Load Categories and Brands
   useEffect(() => {
     api.get<Category[]>('/categories').then((res) => {

@@ -41,6 +41,7 @@ export interface Product {
   description: string;
   price: number; // stored in cents
   compareAtPrice?: number; // stored in cents
+  priceHistory?: { price: number; date: string }[];
   category: Category | string;
   images: ProductImage[];
   stock: number;

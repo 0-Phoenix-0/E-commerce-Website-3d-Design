@@ -39,6 +39,8 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
   const [photo, setPhoto] = useState<{ file: File; preview: string } | null>(null);
   const [resultImages, setResultImages] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [zoomed, setZoomed] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up polling + object URLs on unmount
@@ -159,6 +161,36 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
     setStep('pick');
   }
 
+  function openLightbox(index: number) {
+    setZoomed(false);
+    setLightboxIndex(index);
+  }
+
+  function closeLightbox() {
+    setLightboxIndex(null);
+    setZoomed(false);
+  }
+
+  function showRelative(delta: number) {
+    setZoomed(false);
+    setLightboxIndex((prev) =>
+      prev === null ? prev : (prev + delta + resultImages.length) % resultImages.length
+    );
+  }
+
+  // Keyboard nav for the lightbox
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeLightbox();
+      else if (e.key === 'ArrowRight') showRelative(1);
+      else if (e.key === 'ArrowLeft') showRelative(-1);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightboxIndex, resultImages.length]);
+
   const busy = step === 'uploading' || step === 'generating';
 
   return (
@@ -167,24 +199,40 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
         className="absolute inset-0 bg-black/35 backdrop-blur-sm"
         onClick={() => !busy && onClose()}
       />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 text-left">
-        <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold text-gray-900">Try It On Yourself</h3>
+      <div
+        className={`tryon-pop relative bg-white rounded-3xl shadow-2xl ring-1 ring-black/5 w-full max-h-[90vh] overflow-y-auto text-left transition-[max-width] duration-300 ${
+          step === 'done' ? 'max-w-3xl' : 'max-w-md'
+        }`}
+      >
+        {/* Header with product context */}
+        <div className="relative flex items-center gap-3 px-6 py-4 border-b border-gray-100 bg-gradient-to-b from-gray-50/70 to-white rounded-t-3xl">
+          <div className="relative h-12 w-12 shrink-0 rounded-xl overflow-hidden ring-1 ring-black/5 bg-gray-100">
+            {product.images?.[0]?.url ? (
+              <Image src={product.images[0].url} alt={product.name} fill className="object-cover" unoptimized />
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-white text-[9px] leading-none">✨</span>
+              <h3 className="text-base font-bold text-gray-900 truncate">Try It On Yourself</h3>
+            </div>
+            <p className="text-[11px] text-gray-500 truncate">
+              AI preview of you wearing <span className="font-semibold text-gray-700">{product.name}</span>
+            </p>
+          </div>
           <button
             onClick={() => !busy && onClose()}
             disabled={busy}
             aria-label="Close"
-            className="p-1 text-gray-400 hover:text-gray-900 transition-colors disabled:opacity-40"
+            className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors disabled:opacity-40"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <p className="text-xs text-gray-500 mb-5">
-          Upload a photo of yourself and our AI will show you wearing{' '}
-          <span className="font-semibold text-gray-700">{product.name}</span>.
-        </p>
+
+        <div className="p-6">
 
         {/* Step: pick photo */}
         {(step === 'pick' || step === 'error') && (
@@ -196,7 +244,7 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
             )}
 
             {photo ? (
-              <div className="relative aspect-3/4 rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
+              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
                 <Image src={photo.preview} alt="Your photo" fill className="object-cover" unoptimized />
                 <button
                   onClick={() => {
@@ -212,14 +260,21 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
                 </button>
               </div>
             ) : (
-              <label className="flex flex-col items-center justify-center gap-2 aspect-3/4 rounded-2xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors cursor-pointer select-none bg-gray-50/50">
-                <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.25} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
-                </svg>
-                <span className="text-sm font-bold">Upload your photo</span>
-                <span className="text-[11px] text-gray-400 px-8 text-center">
+              <label className="group relative flex flex-col items-center justify-center gap-3 aspect-[3/4] rounded-2xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-gray-700 transition-colors cursor-pointer select-none bg-gradient-to-b from-gray-50 to-white">
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white ring-1 ring-gray-200 shadow-sm group-hover:ring-indigo-300 group-hover:scale-105 transition-all">
+                  <svg className="w-8 h-8 text-gray-400 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                </span>
+                <span className="text-sm font-bold text-gray-700">Upload your photo</span>
+                <span className="text-[11px] text-gray-400 px-8 text-center leading-relaxed">
                   A full-body, front-facing photo with good lighting works best
                 </span>
+                <div className="flex flex-wrap items-center justify-center gap-1.5 px-6">
+                  {['Full body', 'Good light', 'Front-facing'].map((t) => (
+                    <span key={t} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500">{t}</span>
+                  ))}
+                </div>
                 <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/avif" className="hidden" onChange={handleFileChange} />
               </label>
             )}
@@ -227,11 +282,14 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
             <button
               onClick={handleGenerate}
               disabled={!photo}
-              className="w-full py-3 bg-gray-950 hover:bg-gray-900 text-white text-sm font-bold rounded-2xl transition-all shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-bold rounded-2xl transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:bg-gray-950"
             >
               ✨ Generate My Try-On
             </button>
-            <p className="text-[10px] text-gray-400 text-center">
+            <p className="flex items-center justify-center gap-1 text-[10px] text-gray-400 text-center">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
               Your photo is only used to generate this preview.
             </p>
           </div>
@@ -255,16 +313,35 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
         {/* Step: done */}
         {step === 'done' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {resultImages.map((url, idx) => (
-                <div key={url} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
-                  {/* Claid result URLs are temporary external links — plain img avoids next/image domain config */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`${['Front view', 'Side view', 'Back view'][idx]}`} className="w-full h-auto" />
-                </div>
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => openLightbox(idx)}
+                  className="group block space-y-2 text-left"
+                >
+                  <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                    {/* Claid result URLs are temporary external links — plain img avoids next/image domain config */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`${['Front view', 'Side view', 'Back view'][idx]}`}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
+                      <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.35-5.4a6.75 6.75 0 11-13.5 0 6.75 6.75 0 0113.5 0zM10.5 7.5v6m3-3h-6" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-xs font-semibold text-gray-600 text-center">
+                    {['Front view', 'Side view', 'Back view'][idx]}
+                  </p>
+                </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500 text-center">Front • Side • Back</p>
+            <p className="text-[11px] text-gray-400 text-center">Click any image to zoom &amp; browse</p>
             <div className="flex gap-3">
               <button
                 onClick={handleRetry}
@@ -278,7 +355,75 @@ export default function TryOnModal({ product, onClose }: TryOnModalProps) {
             </p>
           </div>
         )}
+        </div>
       </div>
+
+      {/* Lightbox: fullscreen zoom + prev/next */}
+      {lightboxIndex !== null && resultImages[lightboxIndex] && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90">
+          {/* Backdrop click closes */}
+          <div className="absolute inset-0" onClick={closeLightbox} />
+
+          {/* Close */}
+          <button
+            onClick={closeLightbox}
+            aria-label="Close"
+            className="absolute top-4 right-4 z-10 p-2 text-white/80 hover:text-white transition-colors"
+          >
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* Prev */}
+          {resultImages.length > 1 && (
+            <button
+              onClick={() => showRelative(-1)}
+              aria-label="Previous"
+              className="absolute left-3 sm:left-6 z-10 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+          )}
+
+          {/* Image */}
+          <div className="gallery-no-scrollbar relative z-[1] max-w-[92vw] max-h-[86vh] overflow-auto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={resultImages[lightboxIndex]}
+              src={resultImages[lightboxIndex]}
+              alt={`${['Front view', 'Side view', 'Back view'][lightboxIndex]}`}
+              onClick={() => setZoomed((z) => !z)}
+              className={`select-none transition-all duration-300 ease-out ${
+                zoomed
+                  ? 'max-w-none max-h-none w-[150%] sm:w-[120%] h-auto cursor-zoom-out'
+                  : 'gallery-fade max-w-[92vw] max-h-[86vh] object-contain cursor-zoom-in'
+              }`}
+            />
+          </div>
+
+          {/* Next */}
+          {resultImages.length > 1 && (
+            <button
+              onClick={() => showRelative(1)}
+              aria-label="Next"
+              className="absolute right-3 sm:right-6 z-10 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          )}
+
+          {/* Caption + counter */}
+          <div className="absolute bottom-5 left-0 right-0 z-10 text-center text-white/90 text-sm font-semibold pointer-events-none">
+            {['Front view', 'Side view', 'Back view'][lightboxIndex]} · {lightboxIndex + 1}/{resultImages.length}
+            <span className="block text-[11px] font-normal text-white/50 mt-0.5">Click image to {zoomed ? 'zoom out' : 'zoom in'}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

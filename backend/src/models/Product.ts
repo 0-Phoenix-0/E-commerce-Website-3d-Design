@@ -17,12 +17,18 @@ export interface IProductReview {
   images?: { url: string; publicId: string }[];
 }
 
+export interface IPricePoint {
+  price: number; // cents
+  date: Date;
+}
+
 export interface IProduct extends Document {
   name: string;
   slug: string;
   description: string;
   price: number;
   compareAtPrice?: number;
+  priceHistory?: IPricePoint[];
   category: mongoose.Types.ObjectId;
   images: IProductImage[];
   stock: number;
@@ -98,6 +104,18 @@ const productSchema = new Schema<IProduct>(
     description: { type: String, required: true, trim: true },
     price: { type: Number, required: true, min: 0 },
     compareAtPrice: { type: Number, min: 0 },
+    priceHistory: {
+      type: [
+        new Schema<IPricePoint>(
+          {
+            price: { type: Number, required: true, min: 0 },
+            date: { type: Date, required: true, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
     images: [
       {
