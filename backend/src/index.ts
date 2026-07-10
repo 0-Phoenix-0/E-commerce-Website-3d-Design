@@ -19,6 +19,7 @@ import adminRoutes from './routes/adminRoutes';
 import cartRoutes from './routes/cartRoutes';
 import wishlistRoutes from './routes/wishlistRoutes';
 import orderRoutes from './routes/orderRoutes';
+import tryOnRoutes from './routes/tryOnRoutes';
 
 const app = express();
 
@@ -91,6 +92,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/wishlist', wishlistRoutes);
 app.use('/api/v1/orders', orderRoutes);
+app.use('/api/v1/try-on', tryOnRoutes);
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((_req, res) => {

@@ -12,6 +12,7 @@ import type { Product, ProductReview } from '@/types';
 import ProductCard from '@/components/ProductCard';
 import ThreeDViewer from '@/components/threeD/ThreeDViewer';
 import ThreeDStatus from '@/components/threeD/ThreeDStatus';
+import TryOnModal from '@/components/tryOn/TryOnModal';
 
 interface UploadSignData {
   timestamp: number;
@@ -53,6 +54,9 @@ export default function ProductDetailPage() {
 
   const [wishlisted, setWishlisted] = useState(false);
   const [togglingWishlist, setTogglingWishlist] = useState(false);
+
+  // Virtual Try-On Modal
+  const [showTryOn, setShowTryOn] = useState(false);
   
   // Gallery, Zoom, Tabs
   const [activeImageIdx, setActiveImageIdx] = useState(0);
@@ -207,6 +211,14 @@ export default function ProductDetailPage() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleOpenTryOn() {
+    if (!user) {
+      router.push(`/login?next=/products/${slug}`);
+      return;
+    }
+    setShowTryOn(true);
   }
 
   // Poll 3D model status if currently processing
@@ -369,7 +381,7 @@ export default function ProductDetailPage() {
           {/* Left Column: Interactive Media Gallery */}
           <div className="space-y-4">
             {/* Main Media container with Zoom hover */}
-            <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
+            <div className="product-media-surface relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
               {currentImage.url ? (
                 currentImage.type === 'video' ? (
                   <video
@@ -417,7 +429,7 @@ export default function ProductDetailPage() {
                     <button
                       key={img.publicId}
                       onClick={() => setActiveImageIdx(idx)}
-                      className={`relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 bg-gray-50 transition-all ${
+                      className={`product-media-surface relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 bg-gray-50 transition-all ${
                         activeImageIdx === idx
                           ? 'border-gray-950 ring-2 ring-gray-950/10'
                           : 'border-gray-200 hover:border-gray-400'
@@ -632,6 +644,17 @@ export default function ProductDetailPage() {
                 </button>
               </div>
             )}
+
+            {/* Virtual Try-On button */}
+            <button
+              onClick={handleOpenTryOn}
+              className="mt-3 w-full py-3 px-8 bg-white border-2 border-gray-950 text-gray-950 hover:bg-gray-950 hover:text-white text-sm font-bold rounded-2xl transition-all flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+              </svg>
+              {user ? 'Try It On Yourself' : 'Sign in to Try It On'}
+            </button>
 
             {/* Share link and Shipping status */}
             <div className="mt-6 flex flex-wrap items-center justify-between border-t border-gray-100 pt-5 gap-4">
@@ -1015,6 +1038,9 @@ export default function ProductDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Virtual Try-On Modal */}
+        {showTryOn && <TryOnModal product={product} onClose={() => setShowTryOn(false)} />}
 
       </div>
     </div>

@@ -17,6 +17,20 @@ export const authLimiter = rateLimit({
 });
 
 /**
+ * Limiter for AI try-on generation — each generation costs paid Claid credits.
+ */
+export const tryOnLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many try-on requests. Please try again after 15 minutes.',
+  },
+});
+
+/**
  * General API limiter — relaxed enough for normal usage.
  */
 export const apiLimiter = rateLimit({

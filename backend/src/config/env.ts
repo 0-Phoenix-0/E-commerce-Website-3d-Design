@@ -16,6 +16,7 @@ const envSchema = z.object({
   AI_SERVICE_URL: z.string().url().default('http://localhost:8000'),
   INTERNAL_SECRET: z.string().default('three-d-ai-internal-bypass-key'),
   AUTO_GENERATE_3D: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
+  CLAID_API_KEY: z.string().default(''),
 });
 
 export const env = envSchema.parse(process.env);

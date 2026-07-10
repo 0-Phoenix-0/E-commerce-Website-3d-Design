@@ -94,7 +94,7 @@ export default function ProductCard({ product }: Props) {
       className="group block bg-white rounded-2xl overflow-hidden border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all duration-300 relative"
     >
       {/* Image with Swap and Overlays */}
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
+      <div className="product-media-surface relative aspect-square bg-gray-50 overflow-hidden">
         {primaryImage ? (
           <>
             <Image
