@@ -189,7 +189,7 @@ export default function HomePage() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-gray-900">Free Shipping</h4>
-                  <p className="text-xs text-gray-500 mt-0.5">On all orders over ₹75</p>
+                  <p className="text-xs text-gray-500 mt-0.5">On all orders over ₹7,164</p>
                 </div>
               </div>
 

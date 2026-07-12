@@ -142,7 +142,7 @@ export default function CheckoutPage() {
 
   const items: CartItem[] = cart?.items ?? [];
   const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-  const shipping = subtotal >= 7500 ? 0 : 599; // Free shipping over ₹75
+  const shipping = subtotal >= 716400 ? 0 : 57200; // Free shipping over ₹7,164 ($75 @ 95.52)
   const tax = Math.round(subtotal * 0.08); // 8% Tax
   const total = subtotal + shipping + tax;
 
