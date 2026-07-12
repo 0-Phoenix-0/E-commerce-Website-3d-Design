@@ -217,7 +217,7 @@ function ProductsContent() {
 
       {/* Price filter inputs */}
       <div>
-        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-3">Price Range (USD)</h3>
+        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-3">Price Range (INR)</h3>
         <div className="flex items-center gap-2">
           <input
             type="number"

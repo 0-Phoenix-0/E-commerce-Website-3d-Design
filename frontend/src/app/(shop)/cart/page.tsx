@@ -99,7 +99,7 @@ export default function CartPage() {
 
   const discount = Math.round(subtotal * discountPercent);
   const discountedSubtotal = subtotal - discount;
-  const shipping = subtotal >= 7500 || subtotal === 0 ? 0 : 599; // Free over $75
+  const shipping = subtotal >= 7500 || subtotal === 0 ? 0 : 599; // Free over ₹75
   const tax = Math.round(discountedSubtotal * 0.08); // 8% tax rate
   const total = discountedSubtotal + shipping + tax;
 

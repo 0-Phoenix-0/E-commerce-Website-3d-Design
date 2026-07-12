@@ -456,7 +456,7 @@ export default function ProductModal({ product, categories, onClose, onSaved }: 
           {/* Price row */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="prod-price" className="block text-sm font-medium text-gray-700 mb-1.5">Price (USD)</label>
+              <label htmlFor="prod-price" className="block text-sm font-medium text-gray-700 mb-1.5">Price (INR)</label>
               <input id="prod-price" type="number" step="0.01" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} className={inputClass} placeholder="0.00" />
             </div>
             <div>

@@ -740,7 +740,7 @@ export default function ProductDetailPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
                 </svg>
-                Free shipping on orders over $75
+                Free shipping on orders over ₹75
               </span>
 
               <button
@@ -1101,7 +1101,7 @@ export default function ProductDetailPage() {
                   {product.returnPolicy && (
                     <p>• <strong>Return Policy:</strong> {product.returnPolicy}</p>
                   )}
-                  <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding $75.</p>
+                  <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding ₹75.</p>
                   <p>• Standard shipping takes approximately 3-5 business days depending on delivery address.</p>
                   <p>• We offer a comprehensive <strong>30-day return policy</strong>. Items must be returned in their original packaging and condition to qualify for standard refunds.</p>
                 </div>

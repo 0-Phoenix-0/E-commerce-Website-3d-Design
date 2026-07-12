@@ -248,7 +248,7 @@ export default function BulkProductModal({ categories, onClose, onSaved }: Props
                   <th className="w-24 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Image</th>
                   <th className="w-56 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Name *</th>
                   <th className="w-72 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Description *</th>
-                  <th className="w-32 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Price (USD) *</th>
+                  <th className="w-32 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Price (INR) *</th>
                   <th className="w-32 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Compare At</th>
                   <th className="w-44 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Category *</th>
                   <th className="w-28 px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Stock *</th>
