@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
 import { formatCents } from '@/lib/utils';
-import { loadRazorpayScript, openRazorpayCheckout } from '@/lib/razorpay';
+import { loadRazorpayScript, openRazorpayCheckout, buildDisplayConfig, type PaymentMethod } from '@/lib/razorpay';
 import type { Cart, CartItem, ShippingAddress, Order, CreateOrderResponse } from '@/types';
 
 const EMPTY_ADDRESS: ShippingAddress = {
@@ -39,6 +39,7 @@ export default function CheckoutPage() {
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
 
   // Payment mock fields
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -149,6 +150,7 @@ export default function CheckoutPage() {
           email: user?.email,
         },
         theme: { color: '#0a0a0a' },
+        config: buildDisplayConfig(paymentMethod),
         modal: {
           ondismiss: () => {
             setPlacing(false);
@@ -363,18 +365,46 @@ export default function CheckoutPage() {
               <div className="bg-white rounded-3xl border border-gray-150 p-6 shadow-sm/5 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
                 <h2 className="text-base font-extrabold text-gray-900 uppercase tracking-wider">Payment Method</h2>
 
-                <div className="rounded-2xl border-2 border-gray-950 bg-gray-50/60 p-5 flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-[#0f2d5c] flex items-center justify-center shrink-0">
-                    <span className="text-white font-black text-lg">R</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Razorpay Secure Checkout</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Pay securely with UPI, Cards, Netbanking or Wallets. The Razorpay payment
-                      window will open when you place your order.
-                    </p>
-                  </div>
+                <div className="space-y-3">
+                  {([
+                    { id: 'upi', title: 'UPI', badge: 'Recommended', desc: 'Google Pay, PhonePe, Paytm or any UPI ID — instant & free' },
+                    { id: 'card', title: 'Credit / Debit Card', desc: 'Visa, Mastercard, RuPay & more' },
+                    { id: 'netbanking', title: 'Netbanking', desc: 'All major Indian banks' },
+                    { id: 'all', title: 'Other Options', desc: 'Wallets, EMI & everything Razorpay supports' },
+                  ] as { id: PaymentMethod; title: string; badge?: string; desc: string }[]).map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(m.id)}
+                      className={`w-full text-left rounded-2xl border-2 p-4 flex items-start gap-3 transition-all ${
+                        paymentMethod === m.id
+                          ? 'border-gray-950 bg-gray-50/60'
+                          : 'border-gray-150 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                        paymentMethod === m.id ? 'border-gray-950' : 'border-gray-300'
+                      }`}>
+                        {paymentMethod === m.id && <span className="w-2 h-2 rounded-full bg-gray-950" />}
+                      </span>
+                      <span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-900">{m.title}</span>
+                          {m.badge && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              {m.badge}
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-xs text-gray-500 mt-0.5">{m.desc}</span>
+                      </span>
+                    </button>
+                  ))}
                 </div>
+
+                <p className="text-[11px] text-gray-400">
+                  Payments are processed securely by Razorpay. The payment window opens when you place your order.
+                </p>
 
                 <div className="flex gap-3">
                   <button
@@ -418,9 +448,14 @@ export default function CheckoutPage() {
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment Method</h3>
-                    <p className="text-sm font-bold text-gray-900">Razorpay</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {paymentMethod === 'upi' ? 'UPI'
+                        : paymentMethod === 'card' ? 'Credit / Debit Card'
+                        : paymentMethod === 'netbanking' ? 'Netbanking'
+                        : 'Razorpay — All Options'}
+                    </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      UPI, Cards, Netbanking &amp; Wallets <br />
+                      via Razorpay <br />
                       Secure payment window opens on placing the order
                     </p>
                   </div>
