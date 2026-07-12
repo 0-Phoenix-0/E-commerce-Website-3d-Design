@@ -121,6 +121,8 @@ export type OrderStatus =
   | 'delivered'
   | 'cancelled';
 
+export type PaymentStatus = 'pending' | 'paid' | 'failed';
+
 export interface Order {
   _id: string;
   user: string | User;
@@ -128,7 +130,18 @@ export interface Order {
   totalAmount: number; // in cents
   status: OrderStatus;
   shippingAddress: ShippingAddress;
+  paymentStatus?: PaymentStatus;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   createdAt: string;
+}
+
+export interface CreateOrderResponse {
+  order: Order;
+  razorpayOrderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
 }
 
 export interface ShippingAddress {

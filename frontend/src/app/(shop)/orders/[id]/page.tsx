@@ -157,6 +157,24 @@ export default function OrderDetailPage() {
                   <dt className="text-gray-400 text-xs">Status</dt>
                   <dd className="mt-1"><StatusBadge status={order.status} /></dd>
                 </div>
+                <div>
+                  <dt className="text-gray-400 text-xs">Payment</dt>
+                  <dd className="mt-0.5">
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                      order.paymentStatus === 'paid'
+                        ? 'text-green-600'
+                        : order.paymentStatus === 'failed'
+                          ? 'text-red-600'
+                          : 'text-amber-600'
+                    }`}>
+                      {order.paymentStatus === 'paid'
+                        ? 'Paid via Razorpay'
+                        : order.paymentStatus === 'failed'
+                          ? 'Payment Failed'
+                          : 'Payment Pending'}
+                    </span>
+                  </dd>
+                </div>
               </dl>
             </div>
 

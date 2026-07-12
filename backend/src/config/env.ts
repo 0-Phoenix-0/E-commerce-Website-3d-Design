@@ -17,6 +17,8 @@ const envSchema = z.object({
   INTERNAL_SECRET: z.string().default('three-d-ai-internal-bypass-key'),
   AUTO_GENERATE_3D: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
   CLAID_API_KEY: z.string().default(''),
+  RAZORPAY_KEY_ID: z.string().min(1, 'RAZORPAY_KEY_ID is required'),
+  RAZORPAY_KEY_SECRET: z.string().min(1, 'RAZORPAY_KEY_SECRET is required'),
 });
 
 export const env = envSchema.parse(process.env);

@@ -1,9 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { Order } from '../models/Order';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
 import { AppError } from '../middleware/AppError';
+import { razorpay } from '../config/razorpay';
+import { env } from '../config/env';
 
 const shippingAddressSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').trim(),
@@ -60,7 +63,7 @@ export async function createOrder(
     }
 
     // Build order items snapshot & calculate total
-    let totalAmount = 0;
+    let subtotal = 0;
     const orderItems = validItems.map((item) => {
       const p = item.product as unknown as {
         _id: string;
@@ -69,7 +72,7 @@ export async function createOrder(
         images: { url: string }[];
       };
       const lineTotal = p.price * item.quantity;
-      totalAmount += lineTotal;
+      subtotal += lineTotal;
       return {
         product: p._id,
         name: p.name,
@@ -79,27 +82,104 @@ export async function createOrder(
       };
     });
 
+    // Shipping & tax — must mirror the checkout page calculation
+    const shipping = subtotal >= 716400 ? 0 : 57200;
+    const tax = Math.round(subtotal * 0.08);
+    const totalAmount = subtotal + shipping + tax;
+
     // Decrement stock for each item
     for (const item of validItems) {
       const p = item.product as unknown as { _id: string };
       await Product.findByIdAndUpdate(p._id, { $inc: { stock: -item.quantity } });
     }
 
-    // Create the order
+    // Create the order (payment pending until Razorpay confirms)
     const order = await Order.create({
       user: req.user!._id,
       items: orderItems,
       totalAmount,
       shippingAddress: parsed.data.shippingAddress,
       status: 'pending',
+      paymentStatus: 'pending',
     });
+
+    // Create the matching Razorpay order (amount is already in paise)
+    const razorpayOrder = await razorpay.orders.create({
+      amount: totalAmount,
+      currency: 'INR',
+      receipt: String(order._id),
+    });
+
+    order.razorpayOrderId = razorpayOrder.id;
+    await order.save();
 
     // Clear the cart
     cart.items = [];
     await cart.save();
 
     const populated = await order.populate('user', 'name email');
-    res.status(201).json({ success: true, data: populated });
+    res.status(201).json({
+      success: true,
+      data: {
+        order: populated,
+        razorpayOrderId: razorpayOrder.id,
+        amount: totalAmount,
+        currency: 'INR',
+        keyId: env.RAZORPAY_KEY_ID,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const verifyPaymentSchema = z.object({
+  razorpay_order_id: z.string().min(1),
+  razorpay_payment_id: z.string().min(1),
+  razorpay_signature: z.string().min(1),
+});
+
+export async function verifyPayment(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const parsed = verifyPaymentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new AppError('Invalid payment verification payload', 400));
+    }
+
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = parsed.data;
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      user: req.user!._id,
+    });
+    if (!order) {
+      return next(new AppError('Order not found', 404));
+    }
+    if (order.razorpayOrderId !== razorpay_order_id) {
+      return next(new AppError('Payment does not match this order', 400));
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      order.paymentStatus = 'failed';
+      await order.save();
+      return next(new AppError('Payment signature verification failed', 400));
+    }
+
+    order.paymentStatus = 'paid';
+    order.razorpayPaymentId = razorpay_payment_id;
+    order.status = 'confirmed';
+    await order.save();
+
+    res.json({ success: true, data: order });
   } catch (err) {
     next(err);
   }

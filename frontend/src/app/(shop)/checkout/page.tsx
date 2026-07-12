@@ -7,7 +7,8 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
 import { formatCents } from '@/lib/utils';
-import type { Cart, CartItem, ShippingAddress, Order } from '@/types';
+import { loadRazorpayScript, openRazorpayCheckout } from '@/lib/razorpay';
+import type { Cart, CartItem, ShippingAddress, Order, CreateOrderResponse } from '@/types';
 
 const EMPTY_ADDRESS: ShippingAddress = {
   fullName: '',
@@ -38,14 +39,13 @@ export default function CheckoutPage() {
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
 
   // Payment mock fields
-  const [cardName, setCardName] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [paymentErrors, setPaymentErrors] = useState<Record<string, string>>({});
-
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Preload the Razorpay checkout script
+  useEffect(() => {
+    loadRazorpayScript();
+  }, []);
 
   const fetchCart = useCallback(async () => {
     const res = await api.get<Cart>('/cart');
@@ -95,20 +95,7 @@ export default function CheckoutPage() {
   }
 
   function validatePayment() {
-    const errs: Record<string, string> = {};
-    if (!cardName.trim()) errs.cardName = 'Cardholder name is required';
-    if (!cardNumber.trim() || cardNumber.replace(/\s/g, '').length !== 16) {
-      errs.cardNumber = 'Card number must be 16 digits';
-    }
-    if (!cardExpiry.trim() || !/^\d{2}\/\d{2}$/.test(cardExpiry)) {
-      errs.cardExpiry = 'Expiry must be in MM/YY format';
-    }
-    if (!cardCvv.trim() || cardCvv.length < 3 || cardCvv.length > 4) {
-      errs.cardCvv = 'CVV must be 3 or 4 digits';
-    }
-
-    setPaymentErrors(errs);
-    return Object.keys(errs).length === 0;
+    return true; // Payment is handled by Razorpay at order placement
   }
 
   function goToPayment() {
@@ -129,13 +116,64 @@ export default function CheckoutPage() {
     setError(null);
     setPlacing(true);
 
-    const res = await api.post<Order>('/orders', { shippingAddress: address });
+    // 1. Create the order + Razorpay order on the backend
+    const res = await api.post<CreateOrderResponse>('/orders', { shippingAddress: address });
 
-    if (res.success && res.data) {
-      await refreshCart();
-      router.push(`/orders/${res.data._id}`);
-    } else {
+    if (!res.success || !res.data) {
       setError(res.message ?? 'Failed to place order. Please try again.');
+      setPlacing(false);
+      return;
+    }
+
+    const { order, razorpayOrderId, amount, currency, keyId } = res.data;
+    await refreshCart();
+
+    // 2. Open the Razorpay checkout modal
+    const loaded = await loadRazorpayScript();
+    if (!loaded) {
+      setError('Failed to load Razorpay. Please check your connection and retry from your orders page.');
+      setPlacing(false);
+      return;
+    }
+
+    try {
+      openRazorpayCheckout({
+        key: keyId,
+        amount,
+        currency,
+        name: 'ShopCo',
+        description: `Order #${order._id.slice(-8).toUpperCase()}`,
+        order_id: razorpayOrderId,
+        prefill: {
+          name: address.fullName,
+          email: user?.email,
+        },
+        theme: { color: '#0a0a0a' },
+        modal: {
+          ondismiss: () => {
+            setPlacing(false);
+            setError('Payment was cancelled. You can retry from your orders page.');
+            router.push(`/orders/${order._id}`);
+          },
+        },
+        handler: async (response) => {
+          // 3. Verify the payment signature on the backend
+          const verifyRes = await api.post<Order>(`/orders/${order._id}/verify-payment`, {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+
+          if (verifyRes.success) {
+            router.push(`/orders/${order._id}`);
+          } else {
+            setError(verifyRes.message ?? 'Payment verification failed. Contact support.');
+            setPlacing(false);
+          }
+        },
+      });
+    } catch {
+      setError('Could not open Razorpay checkout. Please try again.');
       setPlacing(false);
     }
   }
@@ -320,71 +358,21 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            {/* Step 2: Payment Details Form */}
+            {/* Step 2: Payment Method */}
             {step === 'payment' && (
               <div className="bg-white rounded-3xl border border-gray-150 p-6 shadow-sm/5 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <h2 className="text-base font-extrabold text-gray-900 uppercase tracking-wider">Payment Details</h2>
+                <h2 className="text-base font-extrabold text-gray-900 uppercase tracking-wider">Payment Method</h2>
 
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="cardName" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Name on Card</label>
-                    <input
-                      id="cardName"
-                      type="text"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value)}
-                      className={inputClass}
-                      placeholder="Jane Doe"
-                    />
-                    {paymentErrors.cardName && <p className="text-[10px] text-red-500 font-semibold mt-1">{paymentErrors.cardName}</p>}
+                <div className="rounded-2xl border-2 border-gray-950 bg-gray-50/60 p-5 flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-[#0f2d5c] flex items-center justify-center shrink-0">
+                    <span className="text-white font-black text-lg">R</span>
                   </div>
-
                   <div>
-                    <label htmlFor="cardNumber" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Card Number</label>
-                    <input
-                      id="cardNumber"
-                      type="text"
-                      maxLength={19}
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').replace(/(\d{4})/g, '$1 ').trim())}
-                      className={inputClass}
-                      placeholder="4111 2222 3333 4444"
-                    />
-                    {paymentErrors.cardNumber && <p className="text-[10px] text-red-500 font-semibold mt-1">{paymentErrors.cardNumber}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="cardExpiry" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Expiration Date</label>
-                      <input
-                        id="cardExpiry"
-                        type="text"
-                        maxLength={5}
-                        value={cardExpiry}
-                        onChange={(e) => {
-                          let val = e.target.value.replace(/\D/g, '');
-                          if (val.length > 2) val = `${val.substring(0, 2)}/${val.substring(2, 4)}`;
-                          setCardExpiry(val);
-                        }}
-                        className={inputClass}
-                        placeholder="MM/YY"
-                      />
-                      {paymentErrors.cardExpiry && <p className="text-[10px] text-red-500 font-semibold mt-1">{paymentErrors.cardExpiry}</p>}
-                    </div>
-
-                    <div>
-                      <label htmlFor="cardCvv" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">CVV Code</label>
-                      <input
-                        id="cardCvv"
-                        type="password"
-                        maxLength={4}
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                        className={inputClass}
-                        placeholder="•••"
-                      />
-                      {paymentErrors.cardCvv && <p className="text-[10px] text-red-500 font-semibold mt-1">{paymentErrors.cardCvv}</p>}
-                    </div>
+                    <p className="text-sm font-bold text-gray-900">Razorpay Secure Checkout</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Pay securely with UPI, Cards, Netbanking or Wallets. The Razorpay payment
+                      window will open when you place your order.
+                    </p>
                   </div>
                 </div>
 
@@ -430,10 +418,10 @@ export default function CheckoutPage() {
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment Method</h3>
-                    <p className="text-sm font-bold text-gray-900">Credit Card</p>
+                    <p className="text-sm font-bold text-gray-900">Razorpay</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Cardholder: {cardName} <br />
-                      Number: •••• •••• •••• {cardNumber.slice(-4)}
+                      UPI, Cards, Netbanking &amp; Wallets <br />
+                      Secure payment window opens on placing the order
                     </p>
                   </div>
                 </div>
@@ -452,7 +440,7 @@ export default function CheckoutPage() {
                     disabled={placing}
                     className="flex-1 py-3.5 bg-gray-950 hover:bg-gray-900 text-white text-xs font-bold uppercase tracking-wider rounded-full transition-all shadow-md active:scale-98"
                   >
-                    {placing ? 'Placing Order…' : 'Place Order Now'}
+                    {placing ? 'Processing Payment…' : 'Pay & Place Order'}
                   </button>
                 </div>
               </div>

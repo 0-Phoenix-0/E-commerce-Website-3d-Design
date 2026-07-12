@@ -26,12 +26,17 @@ export type OrderStatus =
   | 'delivered'
   | 'cancelled';
 
+export type PaymentStatus = 'pending' | 'paid' | 'failed';
+
 export interface IOrder extends Document {
   user: mongoose.Types.ObjectId;
   items: IOrderItem[];
   totalAmount: number;
   status: OrderStatus;
   shippingAddress: IShippingAddress;
+  paymentStatus: PaymentStatus;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,6 +59,13 @@ const orderSchema = new Schema<IOrder>(
       enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'],
       default: 'pending',
     },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    razorpayOrderId: { type: String },
+    razorpayPaymentId: { type: String },
     shippingAddress: {
       fullName: { type: String, required: true },
       addressLine1: { type: String, required: true },
