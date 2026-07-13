@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -11,6 +11,57 @@ import ThreeDLoading from './ThreeDLoading';
 interface Props {
   modelUrl: string | null;
   previewImage?: string | null;
+}
+
+/**
+ * Automatically positions the camera so the entire model is visible.
+ * Works for any model size: rings, bags, furniture, watches, shoes, etc.
+ * Must be called after the model is added to the scene.
+ */
+function fitCameraToModel(
+  model: THREE.Object3D,
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls
+): void {
+  // 1. Compute bounding box of every mesh in the scene
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+
+  // 2. Center model at world origin
+  model.position.sub(center);
+
+  // 3. Key dimensions
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const radius = sphere.radius;
+
+  // 4. Compute camera distance so the full model fits in the FOV
+  //    d = radius / sin(fov/2)  gives the minimum safe distance
+  const fovRad = camera.fov * (Math.PI / 180);
+  const cameraDistance = (radius / Math.sin(fovRad / 2)) * 1.25; // 25% margin
+
+  // 5. Position camera from a good diagonal angle
+  camera.position.set(
+    cameraDistance * 0.7,
+    cameraDistance * 0.5,
+    cameraDistance
+  );
+
+  // 6. Update near/far planes to avoid z-fighting on small/large models
+  camera.near = radius / 100;
+  camera.far = radius * 200;
+  camera.updateProjectionMatrix();
+
+  // 7. Orbit around the true center (now 0,0,0 after model reposition)
+  controls.target.set(0, 0, 0);
+
+  // 8. Dynamic orbit limits based on model radius
+  controls.minDistance = radius * 1.1;
+  controls.maxDistance = radius * 20;
+  controls.zoomSpeed = Math.max(0.5, Math.min(2.0, maxDim * 0.3));
+
+  controls.update();
 }
 
 export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
@@ -91,8 +142,8 @@ export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
     scene.background = new THREE.Color(bgColor);
     sceneRef.current = scene;
 
-    // 2. Camera setup
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    // 2. Camera setup — conservative initial position; fitCameraToModel() takes over after load
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 10000);
     camera.position.set(5, 5, 5);
     cameraRef.current = camera;
 
@@ -106,25 +157,26 @@ export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     rendererRef.current = renderer;
 
-    // 4. Controls setup
+    // 4. Controls setup — dynamic limits set by fitCameraToModel after load
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 1.8; // Prevent going underground
-    controls.minDistance = 1;
-    controls.maxDistance = 50;
     controls.autoRotate = autoRotate;
     controls.autoRotateSpeed = 2.0;
+    controls.enablePan = true;
     controlsRef.current = controls;
 
     // 5. Lighting setup
-    const ambientLight = new THREE.AmbientLight(0xffffff, lightIntensity * 0.4);
+    const ambientLight = new THREE.AmbientLight(0xffffff, lightIntensity * 0.6);
     scene.add(ambientLight);
     ambientLightRef.current = ambientLight;
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, lightIntensity * 0.8);
+    const dirLight = new THREE.DirectionalLight(0xffffff, lightIntensity * 1.0);
     dirLight.position.set(5, 10, 7);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
@@ -133,10 +185,15 @@ export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
     scene.add(dirLight);
     dirLightRef.current = dirLight;
 
-    // Add secondary fill light
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    // Secondary fill light from opposite side
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
+
+    // Rim light from behind
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    rimLight.position.set(0, -5, -10);
+    scene.add(rimLight);
 
     // 6. Animation Loop
     let animationFrameId: number;
@@ -170,33 +227,19 @@ export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
             child.castShadow = true;
             child.receiveShadow = true;
             if (child.material) {
-              child.material.wireframe = wireframe;
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => (m.wireframe = wireframe));
+              } else {
+                child.material.wireframe = wireframe;
+              }
             }
           }
         });
 
-        // Compute Bounding Box to center and scale
-        const box = new THREE.Box3().setFromObject(model);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-
-        // Center model origin
-        model.position.x += model.position.x - center.x;
-        model.position.y += model.position.y - center.y;
-        model.position.z += model.position.z - center.z;
-
         scene.add(model);
 
-        // Position camera to fit the bounding sphere perfectly
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const fov = camera.fov * (Math.PI / 180);
-        let cameraDistance = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-        cameraDistance *= 1.4; // zoom out buffer
-
-        camera.position.set(cameraDistance * 0.8, cameraDistance * 0.6, cameraDistance);
-        camera.lookAt(0, 0, 0);
-        controls.target.set(0, 0, 0);
-        controls.update();
+        // Auto-frame: compute bounding box and position camera to show entire model
+        fitCameraToModel(model, camera, controls);
 
         setLoading(false);
       },
@@ -260,26 +303,17 @@ export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
   // Effect: Light Intensity Change
   useEffect(() => {
     if (ambientLightRef.current) {
-      ambientLightRef.current.intensity = lightIntensity * 0.4;
+      ambientLightRef.current.intensity = lightIntensity * 0.6;
     }
     if (dirLightRef.current) {
-      dirLightRef.current.intensity = lightIntensity * 0.8;
+      dirLightRef.current.intensity = lightIntensity * 1.0;
     }
   }, [lightIntensity]);
 
-  // Handler: Reset Camera
+  // Handler: Reset Camera — re-runs fitCameraToModel on current model
   const handleResetCamera = () => {
     if (!cameraRef.current || !controlsRef.current || !modelRef.current) return;
-
-    const box = new THREE.Box3().setFromObject(modelRef.current);
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = cameraRef.current.fov * (Math.PI / 180);
-    let cameraDistance = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.4;
-
-    cameraRef.current.position.set(cameraDistance * 0.8, cameraDistance * 0.6, cameraDistance);
-    controlsRef.current.target.set(0, 0, 0);
-    controlsRef.current.update();
+    fitCameraToModel(modelRef.current, cameraRef.current, controlsRef.current);
   };
 
   // Handler: Take Screenshot
@@ -332,7 +366,7 @@ export default function ThreeDViewer({ modelUrl, previewImage }: Props) {
             </svg>
           </div>
           <h4 className="text-sm font-semibold text-red-800 mb-1">Failed to Render 3D Model</h4>
-          <p className="text-xs text-red-650/80 max-w-xs mb-4">{loadError}</p>
+          <p className="text-xs text-red-600/80 max-w-xs mb-4">{loadError}</p>
         </div>
       )}
 

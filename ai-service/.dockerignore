@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+
+# Virtual environments
+venv/
+.venv/
+
+# Build artifacts
+build/
+dist/
+
+# Logs
+logs/
+*.log
+
+# Generated model outputs (exclude from build context, use volume mounts)
+storage/
+outputs/
+generated/
+cache/
+
+# AI Weights (pre-downloaded at runtime or volume-mounted)
+weights/
+models/
+
+# HuggingFace cache (volume-mounted)
+.cache/
+huggingface/
+
+# Node modules
+node_modules/
+
+# Generated mesh files (runtime outputs)
+storage/*.obj
+storage/*.glb
+storage/*.gltf
+storage/*.ply
+storage/*.stl
+
+# Generated image outputs (runtime outputs — do NOT exclude static/ images)
+storage/*.png
+storage/*.jpg
+storage/*.jpeg
+
+# macOS / Windows metadata
+.DS_Store
+Thumbs.db

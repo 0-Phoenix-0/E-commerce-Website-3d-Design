@@ -1,19 +1,27 @@
 'use client';
 
+<<<<<<< HEAD
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+=======
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+>>>>>>> d28d33f (AI service update)
 import Image from 'next/image';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useCart } from '@/lib/cart';
 import { useAuth } from '@/lib/auth';
 import { formatCents } from '@/lib/utils';
-import type { Product, ProductReview } from '@/types';
+import type { Product, ProductReview, ThreeDModel } from '@/types';
 import ProductCard from '@/components/ProductCard';
 import ThreeDViewer from '@/components/threeD/ThreeDViewer';
+<<<<<<< HEAD
 import ThreeDStatus from '@/components/threeD/ThreeDStatus';
 import TryOnModal from '@/components/tryOn/TryOnModal';
 import PriceHistoryChart from '@/components/PriceHistoryChart';
+=======
+>>>>>>> d28d33f (AI service update)
 
 interface UploadSignData {
   timestamp: number;
@@ -23,6 +31,19 @@ interface UploadSignData {
   folder: string;
 }
 
+// ── Stage label → progress color ─────────────────────────────────────────────
+const STAGE_LABELS = [
+  'Queued',
+  'Preparing Images',
+  'Removing Background',
+  'Generating Shape',
+  'Generating Texture',
+  'Assembling Model',
+  'Finalizing Preview',
+  'Uploading to Cloudinary',
+  'Completed',
+];
+
 function StockBadge({ stock }: { stock: number }) {
   if (stock === 0)
     return <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />Out of stock</span>;
@@ -31,18 +52,10 @@ function StockBadge({ stock }: { stock: number }) {
   return <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-700"><span className="w-2 h-2 rounded-full bg-green-500" />In stock</span>;
 }
 
-interface Review {
-  id: string;
-  author: string;
-  rating: number;
-  date: string;
-  comment: string;
-  verified: boolean;
-}
-
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { addToCart } = useCart();
 
@@ -56,6 +69,7 @@ export default function ProductDetailPage() {
   const [wishlisted, setWishlisted] = useState(false);
   const [togglingWishlist, setTogglingWishlist] = useState(false);
 
+<<<<<<< HEAD
   // Virtual Try-On Modal
   const [showTryOn, setShowTryOn] = useState(false);
   
@@ -81,8 +95,20 @@ export default function ProductDetailPage() {
     });
   }
   const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'priceHistory' | 'reviews' | 'shipping'>('description');
+=======
+  // Gallery: activeImageIdx = 0..N-1 for product images, 'threed' for the 3D viewer
+  const [activeView, setActiveView] = useState<number | '3d'>(0);
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'reviews' | 'shipping' | '3d-options'>('description');
+>>>>>>> d28d33f (AI service update)
   const [related, setRelated] = useState<Product[]>([]);
   const [copied, setCopied] = useState(false);
+
+  // 3D generation state
+  const [generating3D, setGenerating3D] = useState(false);
+  const [threeDData, setThreeDData] = useState<ThreeDModel | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Review Filters
   const [reviewRatingFilter, setReviewRatingFilter] = useState<number>(0);
@@ -96,6 +122,161 @@ export default function ProductDetailPage() {
   const [writeFiles, setWriteFiles] = useState<{ file: File; preview: string }[]>([]);
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // ── 3D polling ────────────────────────────────────────────────────────────
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((productId: string) => {
+    stopPolling();
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await api.get<{ status: string; modelUrl: string | null; previewImage: string | null; metadata: ThreeDModel }>(`/products/${productId}/3d`);
+        if (res.success && res.data) {
+          const d = res.data as any;
+          const newThreeD: ThreeDModel = {
+            enabled: d.metadata?.enabled ?? false,
+            status: d.status,
+            modelUrl: d.modelUrl,
+            previewImage: d.previewImage,
+            thumbnailUrl: d.metadata?.thumbnailUrl ?? null,
+            engine: d.metadata?.engine ?? null,
+            version: d.metadata?.version ?? null,
+            generatedAt: d.metadata?.generatedAt ?? null,
+            imageHash: d.metadata?.imageHash ?? null,
+            generationTime: d.metadata?.generationTime ?? null,
+            fileSize: d.metadata?.fileSize ?? null,
+            estimatedTime: d.metadata?.estimatedTime ?? null,
+            error: d.metadata?.error ?? null,
+            stageLabel: d.metadata?.stageLabel ?? null,
+            generationSettings: d.metadata?.generationSettings ?? null,
+            meshStats: d.metadata?.meshStats ?? null,
+          };
+
+          setThreeDData(newThreeD);
+          setProduct((prev) => prev ? { ...prev, threeD: newThreeD } : prev);
+
+          if (newThreeD.status === 'ready') {
+            stopPolling();
+            // Auto-switch to 3D view when generation completes
+            setActiveView('3d');
+          } else if (newThreeD.status === 'failed') {
+            stopPolling();
+          }
+        }
+      } catch (err) {
+        console.error('Error polling 3D status:', err);
+      }
+    }, 3000);
+  }, [stopPolling]);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
+
+  // ── Product Load ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    api.get<Product>(`/products/slug/${slug}`).then((res) => {
+      if (res.success && res.data) {
+        setProduct(res.data);
+        setThreeDData(res.data.threeD ?? null);
+        setActiveView(0);
+        // If already processing, start polling immediately
+        if (res.data.threeD?.status === 'processing') {
+          startPolling(res.data._id);
+        }
+        // If ?view=3d in URL, auto-select the 3D view
+        if (searchParams?.get('view') === '3d' && res.data.threeD?.status === 'ready') {
+          setActiveView('3d');
+        }
+      } else {
+        setNotFound(true);
+      }
+      setLoading(false);
+    });
+  }, [slug, searchParams, startPolling]);
+
+  // ── Related Products ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (product) {
+      const catId = typeof product.category === 'object' ? product.category._id : product.category;
+      api.get<Product[]>(`/products?category=${catId}&limit=5`).then((res) => {
+        if (res.success && res.data) {
+          setRelated(res.data.filter((p) => p._id !== product._id).slice(0, 4));
+        }
+      });
+    }
+  }, [product?._id]);
+
+  // ── Wishlist ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (product && user) {
+      api.get<{ wishlisted: boolean }>(`/wishlist/check/${product._id}`).then((res) => {
+        if (res.success && res.data) setWishlisted(res.data.wishlisted);
+      });
+    }
+  }, [product?._id, user]);
+
+  async function handleToggleWishlist() {
+    if (!user || !product) {
+      router.push(`/login?next=/products/${slug}`);
+      return;
+    }
+    setTogglingWishlist(true);
+    const res = await api.post<{ wishlisted: boolean }>(`/wishlist/${product._id}`, {});
+    if (res.success && res.data) setWishlisted(res.data.wishlisted);
+    setTogglingWishlist(false);
+  }
+
+  async function handleAddToCart() {
+    if (!user) {
+      router.push(`/login?next=/products/${slug}`);
+      return;
+    }
+    if (!product) return;
+
+    setAdding(true);
+    setCartMessage(null);
+    const error = await addToCart(product._id, quantity);
+    if (error) {
+      setCartMessage({ type: 'error', text: error });
+    } else {
+      setCartMessage({ type: 'success', text: 'Product added to your cart!' });
+      setTimeout(() => setCartMessage(null), 4000);
+    }
+    setAdding(false);
+  }
+
+  function handleShare() {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  // ── 3D Generation ─────────────────────────────────────────────────────────
+  async function handleStartGeneration() {
+    if (!product || generating3D) return;
+    setGenerating3D(true);
+    try {
+      const res = await api.post<any>(`/products/${product._id}/3d/generate`, {});
+      if (res.success && res.data) {
+        const newThreeD = res.data as ThreeDModel;
+        setThreeDData(newThreeD);
+        setProduct((prev) => prev ? { ...prev, threeD: newThreeD } : prev);
+        if (newThreeD.status === 'processing') {
+          startPolling(product._id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to start 3D generation:', err);
+    }
+    setGenerating3D(false);
+  }
+
+  // ── Review Submit ─────────────────────────────────────────────────────────
   async function handleReviewSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!product) return;
@@ -164,6 +345,7 @@ export default function ProductDetailPage() {
     }
   }
 
+<<<<<<< HEAD
   useEffect(() => {
     api.get<Product>(`/products/slug/${slug}`).then((res) => {
       if (res.success && res.data) {
@@ -324,6 +506,9 @@ export default function ProductDetailPage() {
   };
 
   // Loading skeleton
+=======
+  // ── Loading skeleton ───────────────────────────────────────────────────────
+>>>>>>> d28d33f (AI service update)
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-pulse">
@@ -361,18 +546,26 @@ export default function ProductDetailPage() {
   }
 
   const images = product.images.length > 0 ? product.images : [{ url: '', publicId: 'empty', type: 'image' as const }];
-  const currentImage = images[activeImageIdx];
   const hasDiscount = product.compareAtPrice && product.compareAtPrice > product.price;
   const categoryName = typeof product.category === 'object' ? product.category.name : null;
   const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
 
-  // Use actual database values, fallback gracefully
   const ratingNum = product.rating ?? 0;
   const ratingVal = ratingNum.toFixed(1);
   const reviewsCount = product.reviews?.length ?? 0;
   const brandName = product.brand || product.name.split(' ')[0] || 'Generic';
 
-  // Generate specifications list using actual database values
+  // The active 3D data — use latest from polling if available
+  const threeD = threeDData ?? product.threeD ?? null;
+  const has3DReady = threeD?.status === 'ready' && !!threeD?.modelUrl;
+  const has3DProcessing = threeD?.status === 'processing';
+  const has3DFailed = threeD?.status === 'failed';
+  const has3DAny = has3DReady || has3DProcessing || has3DFailed;
+
+  // Current image shown in main area (when activeView is a number)
+  const currentImageIdx = typeof activeView === 'number' ? activeView : 0;
+  const currentImage = images[currentImageIdx];
+
   const specs = [
     { label: 'Brand', value: brandName },
     ...(product.minimumOrderQuantity ? [{ label: 'Minimum Order Quantity', value: String(product.minimumOrderQuantity) }] : []),
@@ -382,7 +575,6 @@ export default function ProductDetailPage() {
     ...(product.tags && product.tags.length > 0 ? [{ label: 'Tags', value: product.tags.join(', ') }] : []),
   ];
 
-  // Map reviews from product schema, or fallback to empty array
   const rawReviews = (product.reviews || []).map((r) => ({
     id: r._id || String(Math.random()),
     author: r.reviewerName,
@@ -394,21 +586,41 @@ export default function ProductDetailPage() {
     images: r.images ?? [],
   }));
 
-  // Apply sorting and filtering on reviews
   const filteredReviews = rawReviews
     .filter((r) => reviewRatingFilter === 0 || r.rating === reviewRatingFilter)
     .sort((a, b) => {
       if (reviewSort === 'highest') return b.rating - a.rating;
       if (reviewSort === 'lowest') return a.rating - b.rating;
-      return new Date(b.date).getTime() - new Date(a.date).getTime(); // recent (newest first)
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
 
-  // Calculate rating distribution
   const distribution = [0, 0, 0, 0, 0, 0];
   product.reviews?.forEach((r) => {
     const rNum = Math.round(r.rating);
     if (rNum >= 1 && rNum <= 5) distribution[rNum]++;
   });
+
+  // 3D progress calculation
+  const threeDProgress = (() => {
+    if (!threeD || threeD.status === 'none') return 0;
+    if (threeD.status === 'ready') return 100;
+    if (threeD.status === 'failed') return 0;
+    const est = threeD.estimatedTime ?? 30;
+    const ratio = Math.max(0, Math.min(1, (30 - est) / 30));
+    return Math.round(10 + ratio * 85);
+  })();
+
+  // Stage label from DB or derived from progress
+  const currentStageLabel = threeD?.stageLabel || (has3DProcessing ? 'Processing...' : has3DReady ? 'Completed' : 'Not Started');
+
+  // Tab definitions (conditionally include '3d-options')
+  const tabs = [
+    { id: 'description' as const, label: 'Description' },
+    { id: 'specifications' as const, label: 'Specifications' },
+    { id: 'reviews' as const, label: 'Reviews' },
+    { id: 'shipping' as const, label: 'Shipping & Returns' },
+    ...(!has3DReady ? [{ id: '3d-options' as const, label: '3D Options' }] : []),
+  ];
 
   return (
     <div className="bg-white min-h-screen">
@@ -434,9 +646,24 @@ export default function ProductDetailPage() {
 
           {/* Left Column: Interactive Media Gallery */}
           <div className="space-y-4">
+<<<<<<< HEAD
             {/* Main Media container with Zoom hover */}
             <div className="product-media-surface relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
               {currentImage.url ? (
+=======
+
+            {/* Main Media Area */}
+            <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
+              {activeView === '3d' ? (
+                /* 3D Viewer fills the main media area */
+                <div className="absolute inset-0">
+                  <ThreeDViewer
+                    modelUrl={threeD?.modelUrl ?? null}
+                    previewImage={threeD?.previewImage ?? null}
+                  />
+                </div>
+              ) : currentImage.url ? (
+>>>>>>> d28d33f (AI service update)
                 currentImage.type === 'video' ? (
                   <video
                     src={currentImage.url}
@@ -477,13 +704,13 @@ export default function ProductDetailPage() {
               )}
 
               {/* Discount badge overlay */}
-              {hasDiscount && (
-                <span className="absolute top-4 left-4 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">
+              {hasDiscount && activeView !== '3d' && (
+                <span className="absolute top-4 left-4 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm z-10">
                   SALE
                 </span>
               )}
-            </div>
 
+<<<<<<< HEAD
             {/* Thumbnail list */}
             {images.length > 1 && (
               <div className="flex gap-3 overflow-x-auto pb-2">
@@ -522,25 +749,80 @@ export default function ProductDetailPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold text-gray-900 uppercase tracking-widest flex items-center gap-2">
                   <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+=======
+              {/* 3D view badge */}
+              {activeView === '3d' && (
+                <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5 bg-indigo-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+>>>>>>> d28d33f (AI service update)
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
                   </svg>
-                  3D Viewer
-                </h2>
-                {product.threeD?.enabled && product.threeD?.status === 'ready' && (
-                  <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-600 uppercase tracking-wide">
-                    Ready
-                  </span>
-                )}
-              </div>
+                  Interactive 3D
+                </div>
+              )}
+            </div>
 
-              {product.threeD?.enabled && product.threeD?.status === 'ready' ? (
-                <ThreeDViewer modelUrl={product.threeD.modelUrl} previewImage={product.threeD.previewImage} />
-              ) : (
-                <ThreeDStatus
-                  status={product.threeD?.status ?? 'none'}
-                  progress={calcThreeDProgress()}
-                  onViewClick={handleStartOnDemand3D}
-                />
+            {/* Thumbnail Strip — images + optional 3D thumbnail */}
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {/* Product image thumbnails */}
+              {images.map((img, idx) => {
+                if (images.length <= 1 && !has3DReady) return null;
+                const isVideo = img.type === 'video';
+                const isActive = activeView === idx;
+                return (
+                  <button
+                    key={img.publicId}
+                    id={`thumb-img-${idx}`}
+                    onClick={() => setActiveView(idx)}
+                    className={`relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 bg-gray-50 transition-all ${
+                      isActive
+                        ? 'border-gray-950 ring-2 ring-gray-950/10'
+                        : 'border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {isVideo ? (
+                      <>
+                        <video src={img.url} className="w-full h-full object-cover pointer-events-none" muted />
+                        <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-white fill-current" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </div>
+                      </>
+                    ) : img.url ? (
+                      <Image src={img.url} alt="" fill className="object-cover" />
+                    ) : null}
+                  </button>
+                );
+              })}
+
+              {/* 3D Thumbnail — only shown when model is ready */}
+              {has3DReady && (
+                <button
+                  id="thumb-3d"
+                  onClick={() => setActiveView('3d')}
+                  title="View in 3D"
+                  className={`relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 transition-all ${
+                    activeView === '3d'
+                      ? 'border-indigo-600 ring-2 ring-indigo-500/20'
+                      : 'border-gray-200 hover:border-indigo-400'
+                  }`}
+                >
+                  {/* Preview image or cube icon as background */}
+                  {threeD?.previewImage ? (
+                    <Image src={threeD.previewImage} alt="3D model preview" fill className="object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-indigo-50 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                      </svg>
+                    </div>
+                  )}
+                  {/* "3D" label overlay */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-end pb-1.5 bg-gradient-to-t from-indigo-900/70 via-transparent to-transparent">
+                    <span className="text-[9px] font-black text-white uppercase tracking-widest leading-none">3D</span>
+                  </div>
+                </button>
               )}
             </div>
 
@@ -558,7 +840,7 @@ export default function ProductDetailPage() {
               {product.name}
             </h1>
 
-            {/* Dynamic Rating header link */}
+            {/* Rating */}
             <div className="flex items-center gap-2 mb-4">
               <div className="flex text-yellow-450">
                 {[...Array(5)].map((_, i) => (
@@ -578,7 +860,7 @@ export default function ProductDetailPage() {
               </span>
             </div>
 
-            {/* Price display with discount details */}
+            {/* Price */}
             <div className="flex items-baseline gap-3 mb-4">
               <span className="text-3xl font-extrabold text-gray-900">{formatCents(product.price)}</span>
               {hasDiscount && (
@@ -591,11 +873,12 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Inventory level Stock Badge */}
+            {/* Stock */}
             <div className="mb-4">
               <StockBadge stock={product.stock} />
             </div>
 
+<<<<<<< HEAD
             {/* Price history / forecast quick link */}
             <button
               onClick={() => {
@@ -611,6 +894,9 @@ export default function ProductDetailPage() {
             </button>
 
             {/* Key product info list (Brand, Warranty, Shipping, return, min quantity, availability status) */}
+=======
+            {/* Key Info Grid */}
+>>>>>>> d28d33f (AI service update)
             <div className="grid grid-cols-2 gap-4 border-t border-b border-gray-100 py-4 mb-6 text-xs sm:text-sm text-gray-600">
               {brandName && (
                 <div>
@@ -650,7 +936,29 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Action Bar: Cart notification messages */}
+            {/* 3D Quick Access Banner — only when ready */}
+            {has3DReady && activeView !== '3d' && (
+              <button
+                id="view-3d-banner-btn"
+                onClick={() => setActiveView('3d')}
+                className="mb-5 flex items-center gap-3 w-full px-4 py-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-2xl transition-all text-left group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-indigo-900">View in 3D</p>
+                  <p className="text-xs text-indigo-600">Interactive 3D model — rotate, zoom, inspect</p>
+                </div>
+                <svg className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            )}
+
+            {/* Cart Message */}
             {cartMessage && (
               <div className={`mb-5 rounded-2xl px-4 py-3.5 text-sm font-semibold border ${
                 cartMessage.type === 'success'
@@ -661,11 +969,9 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Quantity + Add to Cart buttons */}
+            {/* Quantity + Add to Cart */}
             {product.stock > 0 ? (
               <div className="flex flex-col sm:flex-row gap-3">
-                
-                {/* Quantity adjustment controls */}
                 <div className="flex items-center border border-gray-200 rounded-2xl overflow-hidden shrink-0 bg-white">
                   <button
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
@@ -688,7 +994,6 @@ export default function ProductDetailPage() {
                   </button>
                 </div>
 
-                {/* Add to Cart button */}
                 <button
                   id="add-to-cart-btn"
                   onClick={handleAddToCart}
@@ -698,7 +1003,6 @@ export default function ProductDetailPage() {
                   {adding ? 'Adding to Cart…' : user ? 'Add to Cart' : 'Sign in to Add to Cart'}
                 </button>
 
-                {/* Wishlist toggle button */}
                 <button
                   id="wishlist-btn"
                   onClick={handleToggleWishlist}
@@ -723,6 +1027,7 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+<<<<<<< HEAD
             {/* Virtual Try-On button */}
             <button
               onClick={handleOpenTryOn}
@@ -735,6 +1040,9 @@ export default function ProductDetailPage() {
             </button>
 
             {/* Share link and Shipping status */}
+=======
+            {/* Share */}
+>>>>>>> d28d33f (AI service update)
             <div className="mt-6 flex flex-wrap items-center justify-between border-t border-gray-100 pt-5 gap-4">
               <span className="text-xs text-gray-400 flex items-center gap-1.5 font-semibold">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -757,6 +1065,7 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
+<<<<<<< HEAD
         {/* Tabbed Specs, Description, and Reviews */}
         <div id="product-tabs" className="mt-16 border-t border-gray-150 pt-10">
           <div className="flex border-b border-gray-100 mb-8 overflow-x-auto">
@@ -770,8 +1079,16 @@ export default function ProductDetailPage() {
                   { id: 'shipping', label: 'Shipping & Returns' },
                 ] as const
               ).map((tab) => (
+=======
+        {/* ── Tabbed Section ─────────────────────────────────────────────────── */}
+        <div className="mt-16 border-t border-gray-150 pt-10">
+          <div className="flex border-b border-gray-100 mb-8 overflow-x-auto">
+            <div className="flex space-x-8">
+              {tabs.map((tab) => (
+>>>>>>> d28d33f (AI service update)
                 <button
                   key={tab.id}
+                  id={`tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id)}
                   className={`pb-4 text-sm font-semibold tracking-wide border-b-2 whitespace-nowrap transition-all duration-200 ${
                     activeTab === tab.id
@@ -780,13 +1097,17 @@ export default function ProductDetailPage() {
                   }`}
                 >
                   {tab.label}
+                  {tab.id === '3d-options' && has3DProcessing && (
+                    <span className="ml-2 inline-block w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                  )}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Tab content panel display */}
           <div className="min-h-48 text-sm text-gray-600 leading-relaxed max-w-4xl">
+
+            {/* Description Tab */}
             {activeTab === 'description' && (
               <div className="space-y-4">
                 <p className="font-semibold text-gray-900 text-base">Product Description</p>
@@ -794,6 +1115,7 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            {/* Specifications Tab */}
             {activeTab === 'specifications' && (
               <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white shadow-sm/5">
                 <table className="min-w-full divide-y divide-gray-150">
@@ -809,38 +1131,28 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+<<<<<<< HEAD
             {activeTab === 'priceHistory' && (
               <PriceHistoryChart product={product} />
             )}
 
+=======
+            {/* Reviews Tab */}
+>>>>>>> d28d33f (AI service update)
             {activeTab === 'reviews' && (
               <div className="space-y-8">
-                {/* Rating Breakdown & Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 rounded-2xl p-6 border border-gray-150">
-                  {/* Left Column: Overall stats */}
                   <div className="flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-200/80 pb-6 md:pb-0 md:pr-6">
-                    <span className="text-5xl font-black text-gray-950 tracking-tight mb-2">
-                      {ratingVal}
-                    </span>
+                    <span className="text-5xl font-black text-gray-950 tracking-tight mb-2">{ratingVal}</span>
                     <div className="flex text-yellow-450 mb-2">
                       {[...Array(5)].map((_, i) => (
-                        <svg
-                          key={i}
-                          className={`w-4 h-4 ${i < Math.round(ratingNum) ? 'fill-current' : 'text-gray-200'}`}
-                          viewBox="0 0 20 20"
-                          fill={i < Math.round(ratingNum) ? 'currentColor' : 'none'}
-                          stroke="currentColor"
-                        >
+                        <svg key={i} className={`w-4 h-4 ${i < Math.round(ratingNum) ? 'fill-current' : 'text-gray-200'}`} viewBox="0 0 20 20" fill={i < Math.round(ratingNum) ? 'currentColor' : 'none'} stroke="currentColor">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
                       ))}
                     </div>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                      {reviewsCount} Customer Reviews
-                    </span>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{reviewsCount} Customer Reviews</span>
                   </div>
-
-                  {/* Middle Column: Rating distribution */}
                   <div className="col-span-2 flex flex-col justify-center space-y-2">
                     {[5, 4, 3, 2, 1].map((stars) => {
                       const count = distribution[stars];
@@ -858,15 +1170,10 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
-                {/* Reviews filter settings bar */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-gray-100 pb-5">
                   <div className="flex items-center gap-4 w-full sm:w-auto">
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wider shrink-0">Filter Stars</span>
-                    <select
-                      value={reviewRatingFilter}
-                      onChange={(e) => setReviewRatingFilter(Number(e.target.value))}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold focus:border-gray-950 focus:outline-none transition-colors"
-                    >
+                    <select value={reviewRatingFilter} onChange={(e) => setReviewRatingFilter(Number(e.target.value))} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold focus:border-gray-950 focus:outline-none transition-colors">
                       <option value="0">All Reviews</option>
                       <option value="5">5 Stars only</option>
                       <option value="4">4 Stars only</option>
@@ -875,37 +1182,20 @@ export default function ProductDetailPage() {
                       <option value="1">1 Star only</option>
                     </select>
                   </div>
-
                   <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                    <select
-                      value={reviewSort}
-                      onChange={(e) => setReviewSort(e.target.value as any)}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold focus:border-gray-950 focus:outline-none transition-colors mr-2"
-                    >
+                    <select value={reviewSort} onChange={(e) => setReviewSort(e.target.value as any)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold focus:border-gray-950 focus:outline-none transition-colors mr-2">
                       <option value="recent">Most Recent</option>
                       <option value="highest">Highest Rated</option>
                       <option value="lowest">Lowest Rated</option>
                     </select>
-
                     {user ? (
-                      <button
-                        onClick={() => setShowWriteModal(true)}
-                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-bold transition-all active:scale-95 shadow-sm uppercase tracking-wider shrink-0"
-                      >
-                        Write a Review
-                      </button>
+                      <button onClick={() => setShowWriteModal(true)} className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-bold transition-all active:scale-95 shadow-sm uppercase tracking-wider shrink-0">Write a Review</button>
                     ) : (
-                      <Link
-                        href={`/login?next=/products/${product.slug}`}
-                        className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-xs font-bold transition-all inline-block uppercase tracking-wider shrink-0"
-                      >
-                        Log in to Review
-                      </Link>
+                      <Link href={`/login?next=/products/${product.slug}`} className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-xs font-bold transition-all inline-block uppercase tracking-wider shrink-0">Log in to Review</Link>
                     )}
                   </div>
                 </div>
 
-                {/* Review cards */}
                 {filteredReviews.length === 0 ? (
                   <p className="text-gray-450 italic py-6">No matching reviews found for this selection.</p>
                 ) : (
@@ -916,49 +1206,26 @@ export default function ProductDetailPage() {
                           <div className="flex items-center gap-2">
                             <span className="font-extrabold text-gray-950">{rev.author}</span>
                             {rev.verified && (
-                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-wider">
-                                Verified Purchase
-                              </span>
+                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-wider">Verified Purchase</span>
                             )}
                           </div>
                           <span className="text-[10px] text-gray-400 font-semibold">{rev.date}</span>
                         </div>
-
-                        {/* Stars & Title */}
                         <div className="flex items-center gap-3">
                           <div className="flex text-yellow-450">
                             {[...Array(5)].map((_, i) => (
-                              <svg
-                                key={i}
-                                className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-gray-200'}`}
-                                viewBox="0 0 20 20"
-                                fill={i < rev.rating ? 'currentColor' : 'none'}
-                                stroke="currentColor"
-                              >
+                              <svg key={i} className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-gray-200'}`} viewBox="0 0 20 20" fill={i < rev.rating ? 'currentColor' : 'none'} stroke="currentColor">
                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                               </svg>
                             ))}
                           </div>
-                          {rev.title && (
-                            <span className="font-bold text-gray-900 text-sm">
-                              {rev.title}
-                            </span>
-                          )}
+                          {rev.title && <span className="font-bold text-gray-900 text-sm">{rev.title}</span>}
                         </div>
-
                         <p className="text-gray-650 text-sm">{rev.comment}</p>
-
-                        {/* Review Images */}
                         {rev.images && rev.images.length > 0 && (
                           <div className="flex gap-2.5 pt-2">
                             {rev.images.map((img: any, i: number) => (
-                              <a
-                                key={i}
-                                href={img.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 transition-transform hover:scale-105"
-                              >
+                              <a key={i} href={img.url} target="_blank" rel="noreferrer" className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 transition-transform hover:scale-105">
                                 <Image src={img.url} alt="" fill className="object-cover" />
                               </a>
                             ))}
@@ -969,25 +1236,18 @@ export default function ProductDetailPage() {
                   </div>
                 )}
 
-                {/* Write Review Modal Overlay */}
+                {/* Write Review Modal */}
                 {showWriteModal && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={() => setShowWriteModal(false)} />
                     <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 text-left">
                       <h3 className="text-lg font-bold text-gray-900 mb-4">Write a Product Review</h3>
-                      
                       <form onSubmit={handleReviewSubmit} className="space-y-4">
-                        {/* Rating Selection */}
                         <div>
                           <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Rating</label>
                           <div className="flex gap-1.5">
                             {[1, 2, 3, 4, 5].map((stars) => (
-                              <button
-                                type="button"
-                                key={stars}
-                                onClick={() => setWriteRating(stars)}
-                                className={`p-0.5 transition-colors ${stars <= writeRating ? 'text-yellow-450' : 'text-gray-200'}`}
-                              >
+                              <button type="button" key={stars} onClick={() => setWriteRating(stars)} className={`p-0.5 transition-colors ${stars <= writeRating ? 'text-yellow-450' : 'text-gray-200'}`}>
                                 <svg className="w-8 h-8 fill-current" viewBox="0 0 20 20" stroke="currentColor">
                                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                 </svg>
@@ -995,52 +1255,23 @@ export default function ProductDetailPage() {
                             ))}
                           </div>
                         </div>
-
-                        {/* Title */}
                         <div>
                           <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Review Title</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Amazing quality, highly recommended!"
-                            value={writeTitle}
-                            onChange={(e) => setWriteTitle(e.target.value)}
-                            className="block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-gray-950 focus:outline-none transition-colors"
-                          />
+                          <input type="text" required placeholder="e.g. Amazing quality, highly recommended!" value={writeTitle} onChange={(e) => setWriteTitle(e.target.value)} className="block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-gray-950 focus:outline-none transition-colors" />
                         </div>
-
-                        {/* Comment */}
                         <div>
                           <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Comments</label>
-                          <textarea
-                            rows={4}
-                            required
-                            placeholder="Share your experience with this product..."
-                            value={writeComment}
-                            onChange={(e) => setWriteComment(e.target.value)}
-                            className="block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-gray-950 focus:outline-none transition-colors resize-none"
-                          />
+                          <textarea rows={4} required placeholder="Share your experience with this product..." value={writeComment} onChange={(e) => setWriteComment(e.target.value)} className="block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-gray-950 focus:outline-none transition-colors resize-none" />
                         </div>
-
-                        {/* Review Images */}
                         <div>
-                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                            Upload Review Images <span className="text-gray-300 font-normal">(optional)</span>
-                          </label>
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Upload Review Images <span className="text-gray-300 font-normal">(optional)</span></label>
                           {writeFiles.length > 0 && (
                             <div className="grid grid-cols-4 gap-2 mb-2">
                               {writeFiles.map((wf, idx) => (
                                 <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-250 bg-gray-50">
                                   <Image src={wf.preview} alt="" fill className="object-cover" />
-                                  <button
-                                    type="button"
-                                    onClick={() => setWriteFiles(writeFiles.filter((_, i) => i !== idx))}
-                                    className="absolute top-1 right-1 p-0.5 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors"
-                                    title="Remove"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
+                                  <button type="button" onClick={() => setWriteFiles(writeFiles.filter((_, i) => i !== idx))} className="absolute top-1 right-1 p-0.5 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                   </button>
                                 </div>
                               ))}
@@ -1048,38 +1279,12 @@ export default function ProductDetailPage() {
                           )}
                           <label className="block w-full py-2 text-center rounded-lg border border-dashed border-gray-300 text-xs font-bold text-gray-550 hover:border-gray-400 hover:text-gray-700 transition-colors cursor-pointer select-none">
                             <span>➕ Add Review Images</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              className="hidden"
-                              onChange={(e) => {
-                                const files = Array.from(e.target.files || []);
-                                const newItems = files.map((file) => ({
-                                  file,
-                                  preview: URL.createObjectURL(file),
-                                }));
-                                setWriteFiles((prev) => [...prev, ...newItems]);
-                              }}
-                            />
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { const files = Array.from(e.target.files || []); const newItems = files.map((file) => ({ file, preview: URL.createObjectURL(file) })); setWriteFiles((prev) => [...prev, ...newItems]); }} />
                           </label>
                         </div>
-
-                        {/* Modal Footer buttons */}
                         <div className="flex gap-3 justify-end pt-2">
-                          <button
-                            type="button"
-                            disabled={submittingReview}
-                            onClick={() => setShowWriteModal(false)}
-                            className="px-4 py-2 border border-gray-300 text-gray-750 font-semibold rounded-lg text-xs uppercase tracking-wider hover:bg-gray-50 transition-colors disabled:opacity-40"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            disabled={submittingReview}
-                            className="px-4 py-2 bg-gray-900 text-white font-bold rounded-lg text-xs uppercase tracking-wider hover:bg-gray-800 transition-colors disabled:opacity-40 flex items-center gap-1.5"
-                          >
+                          <button type="button" disabled={submittingReview} onClick={() => setShowWriteModal(false)} className="px-4 py-2 border border-gray-300 text-gray-750 font-semibold rounded-lg text-xs uppercase tracking-wider hover:bg-gray-50 transition-colors disabled:opacity-40">Cancel</button>
+                          <button type="submit" disabled={submittingReview} className="px-4 py-2 bg-gray-900 text-white font-bold rounded-lg text-xs uppercase tracking-wider hover:bg-gray-800 transition-colors disabled:opacity-40 flex items-center gap-1.5">
                             {submittingReview && <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                             Submit Review
                           </button>
@@ -1091,10 +1296,12 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            {/* Shipping Tab */}
             {activeTab === 'shipping' && (
               <div className="space-y-4">
                 <p className="font-semibold text-gray-900 text-base">Shipping & Returns Information</p>
                 <div className="text-gray-500 space-y-2">
+<<<<<<< HEAD
                   {product.shippingInformation && (
                     <p>• <strong>Shipping Info:</strong> {product.shippingInformation}</p>
                   )}
@@ -1102,15 +1309,165 @@ export default function ProductDetailPage() {
                     <p>• <strong>Return Policy:</strong> {product.returnPolicy}</p>
                   )}
                   <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding ₹7,164.</p>
+=======
+                  {product.shippingInformation && <p>• <strong>Shipping Info:</strong> {product.shippingInformation}</p>}
+                  {product.returnPolicy && <p>• <strong>Return Policy:</strong> {product.returnPolicy}</p>}
+                  <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding $75.</p>
+>>>>>>> d28d33f (AI service update)
                   <p>• Standard shipping takes approximately 3-5 business days depending on delivery address.</p>
                   <p>• We offer a comprehensive <strong>30-day return policy</strong>. Items must be returned in their original packaging and condition to qualify for standard refunds.</p>
                 </div>
               </div>
             )}
+
+            {/* 3D Options Tab — shown only when no ready model */}
+            {activeTab === '3d-options' && (
+              <div className="max-w-2xl">
+                {/* Header Illustration */}
+                <div className="flex flex-col items-center text-center py-8 mb-8 bg-gradient-to-b from-indigo-50 to-white rounded-3xl border border-indigo-100">
+                  <div className="relative mb-6">
+                    <div className="w-24 h-24 rounded-3xl bg-indigo-100 flex items-center justify-center">
+                      <svg className="w-14 h-14 text-indigo-500" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                      </svg>
+                    </div>
+                    {has3DProcessing && (
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center">
+                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {has3DFailed && (
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-red-500 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">AI-Generated 3D Model</h3>
+                  <p className="text-sm text-gray-500 max-w-sm leading-relaxed">
+                    Generate a photorealistic interactive 3D model of this product using AI. Rotate, zoom, and inspect every detail before you buy.
+                  </p>
+                </div>
+
+                {/* Status + Controls */}
+                <div className="space-y-5">
+                  {/* Info row */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Estimated Time</p>
+                      <p className="font-bold text-gray-900">20–35 minutes</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Quality Preset</p>
+                      <p className="font-bold text-gray-900 capitalize">{threeD?.generationSettings?.quality ?? 'Standard'}</p>
+                    </div>
+                  </div>
+
+                  {/* Progress display when processing */}
+                  {has3DProcessing && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                          <span className="text-sm font-bold text-indigo-900">Generating 3D Model</span>
+                        </div>
+                        <span className="text-sm font-bold text-indigo-700">{threeDProgress}%</span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="h-2.5 bg-indigo-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                          style={{ width: `${threeDProgress}%` }}
+                        />
+                      </div>
+
+                      {/* Stage label */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-indigo-700">{currentStageLabel}</span>
+                      </div>
+
+                      {/* Stage steps */}
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        {STAGE_LABELS.filter(l => l !== 'Queued').map((label) => {
+                          const stageIdx = STAGE_LABELS.indexOf(label);
+                          const currentIdx = STAGE_LABELS.indexOf(currentStageLabel);
+                          const isDone = currentIdx > stageIdx;
+                          const isCurrent = currentStageLabel === label;
+                          return (
+                            <div key={label} className={`flex items-center gap-1.5 text-[10px] font-semibold transition-colors ${
+                              isDone ? 'text-indigo-600' : isCurrent ? 'text-indigo-800' : 'text-gray-400'
+                            }`}>
+                              {isDone ? (
+                                <svg className="w-3 h-3 text-indigo-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                              ) : isCurrent ? (
+                                <span className="w-3 h-3 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin shrink-0" />
+                              ) : (
+                                <span className="w-3 h-3 rounded-full border border-gray-300 shrink-0" />
+                              )}
+                              {label}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Failed state */}
+                  {has3DFailed && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+                          <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-red-800 mb-1">Generation Failed</p>
+                          <p className="text-xs text-red-600">
+                            {threeD?.error?.split('\n')[0] || 'The AI generation process encountered an error. This can happen due to low image contrast or resource constraints.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Generate / Retry button */}
+                  {!has3DProcessing && (
+                    <button
+                      id="generate-3d-btn"
+                      onClick={handleStartGeneration}
+                      disabled={generating3D}
+                      className={`w-full py-3.5 px-6 rounded-2xl text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${
+                        has3DFailed
+                          ? 'bg-red-600 hover:bg-red-700 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      } disabled:opacity-60 disabled:cursor-not-allowed`}
+                    >
+                      {generating3D ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Queuing...
+                        </>
+                      ) : has3DFailed ? (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                          Retry Generation
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+                          Generate 3D Model with AI
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
 
-        {/* Related Products Section */}
+        {/* Related Products */}
         {related.length > 0 && (
           <div className="mt-24 border-t border-gray-150 pt-16">
             <h2 className="text-2xl font-extrabold text-gray-900 mb-8 tracking-tight">You May Also Like</h2>

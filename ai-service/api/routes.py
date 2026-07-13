@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from config import settings
 from jobs.job_manager import job_manager
+from utils.gpu_monitor import get_gpu_info
 
 router = APIRouter()
 
@@ -21,12 +22,38 @@ def verify_secret(x_ai_secret: Optional[str] = Header(None)):
             detail="Invalid internal authorization secret token"
         )
 
+@router.get("/health", tags=["Status"])
+async def health_check():
+    """Returns service health including CUDA status, GPU info, and queue depth."""
+    gpu_info = get_gpu_info()
+    queue_status = job_manager.get_queue_status()
+    return {
+        "status": "healthy",
+        "cuda_available": settings.CUDA_AVAILABLE,
+        "gpu_name": settings.GPU_NAME,
+        "device": settings.DEVICE,
+        "queue_depth": queue_status.get("queue_size", 0),
+        "jobs_running": len(queue_status.get("running_product_ids", [])),
+        "jobs_queued": queue_status.get("jobs_summary", {}).get("queued", 0),
+        "vram_allocated_mb": gpu_info.get("vram_allocated_mb"),
+        "vram_reserved_mb": gpu_info.get("vram_reserved_mb"),
+        "engine_version": "Hunyuan3D-v2.1",
+    }
+
+
 @router.post("/generate")
 async def generate_model(req: GenerateRequest, x_ai_secret: Optional[str] = Header(None)):
     verify_secret(x_ai_secret)
     if not req.image_urls:
-        raise HTTPException(status_code=400, detail="Images required for generation")
-        
+        raise HTTPException(status_code=400, detail="At least one image URL is required for generation.")
+
+    if req.quality not in settings.QUALITY_VALID_VALUES:
+        valid = ", ".join(sorted(settings.QUALITY_VALID_VALUES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid quality value '{req.quality}'. Must be one of: {valid}"
+        )
+
     job = job_manager.add_job(
         product_id=req.product_id,
         image_urls=req.image_urls,
@@ -74,6 +101,12 @@ async def delete_model(product_id: str, x_ai_secret: Optional[str] = Header(None
 
 @router.get("/download/{product_id}")
 async def download_glb(product_id: str):
+    """
+    Legacy local fallback endpoint — serves GLB from the container's /app/storage/ directory.
+    Production use: The frontend should use the Cloudinary secure_url stored in MongoDB
+    (product.threeD.modelUrl). This endpoint exists for local testing and disaster recovery
+    in case Cloudinary is unavailable.
+    """
     glb_path = settings.STORAGE_DIR / f"{product_id}.glb"
     if not glb_path.exists():
         raise HTTPException(status_code=404, detail="GLB model not found in storage")
@@ -85,6 +118,12 @@ async def download_glb(product_id: str):
 
 @router.get("/preview/{product_id}")
 async def get_preview(product_id: str):
+    """
+    Legacy local fallback endpoint — serves the preview PNG from the container's /app/storage/ directory.
+    Production use: The frontend should use the Cloudinary secure_url stored in MongoDB
+    (product.threeD.previewImage / thumbnailUrl). This endpoint exists for local testing and
+    disaster recovery in case Cloudinary is unavailable.
+    """
     preview_path = settings.STORAGE_DIR / f"{product_id}_preview.png"
     if not preview_path.exists():
         fallback = settings.BASE_DIR / "static" / "default_preview.png"

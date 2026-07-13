@@ -87,6 +87,11 @@ export interface ThreeDModel {
   textureResolution?: string | null;
   estimatedTime?: number | null;
   error?: string | null;
+  stageLabel?: string | null;
+  generationSettings?: {
+    quality: string;
+    textureResolution: string;
+  } | null;
   meshStats?: {
     vertices: number;
     faces: number;

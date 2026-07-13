@@ -307,6 +307,8 @@ export async function updateThreeDMetadata(
       'textureResolution',
       'estimatedTime',
       'error',
+      'stageLabel',
+      'generationSettings',
       'meshStats',
     ];
 

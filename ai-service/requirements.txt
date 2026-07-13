@@ -1,35 +1,82 @@
-fastapi==0.111.0
-uvicorn==0.30.1
-pydantic==2.7.4
+# -----------------------------------------------------------------------
+# AI Service Requirements
+# Pinned to match official Hunyuan3D-2.1 repository versions.
+# -----------------------------------------------------------------------
+
+# Web Framework
+fastapi==0.115.12
+uvicorn==0.34.3
+pydantic==2.10.6
+
+# HTTP / Networking
 requests==2.32.3
-numpy==1.26.4
-trimesh==4.4.1
-Pillow==10.3.0
-scipy==1.13.1
-diffusers
-transformers
-rembg
-tqdm
-omegaconf
-matplotlib
-opencv-python
-imageio
-jaxtyping
-einops
-SentencePiece
-accelerate
-PyMCubes
-xatlas
-libigl
-typeguard
-open3d
-ninja
-roma
-huggingface_hub
-pybind11
-pymeshlab
-pygltflib
-onnxruntime
+
+# Build Tools
+# NOTE: setuptools is NOT pinned here because triton (required by torch) has an
+# unbound setuptools dependency that pip resolves during this install, overriding
+# any pin set in requirements.txt. The Dockerfile enforces setuptools<82 as the
+# final pip operation after all installs complete.
+ninja==1.11.1.1
+pybind11==2.13.4
+
+# Core ML / Deep Learning
+# NOTE: torch, torchvision, torchaudio are provided by the base image.
+# Do NOT pin them here to avoid version conflicts with the CUDA 12.8 image.
+transformers==4.46.0
+diffusers==0.30.0
+accelerate==1.1.1
+pytorch-lightning==1.9.5
+safetensors==0.4.4
+huggingface_hub==0.30.2
 timm
 torchdiffeq
-deepspeed
+einops==0.8.0
+
+# Scientific Computing
+numpy==1.24.4
+scipy==1.14.1
+pandas==2.2.2
+
+# Computer Vision & Image Processing
+opencv-python==4.10.0.84
+Pillow==10.3.0
+imageio==2.36.0
+scikit-image==0.24.0
+rembg==2.0.65
+realesrgan==0.3.0
+basicsr==1.4.2
+
+# 3D Mesh Processing
+trimesh==4.4.7
+pymeshlab==2022.2.post3
+pygltflib==1.16.3
+xatlas==0.0.9
+open3d==0.18.0
+PyMCubes
+
+# Configuration Management
+omegaconf==2.3.0
+pyyaml==6.0.2
+
+# GPU Computing
+cupy-cuda12x==13.4.1
+
+# ONNX Runtime (for rembg models)
+onnxruntime==1.16.3
+
+# Tensor Metrics
+torchmetrics==1.6.0
+
+# NLP / Tokenization
+SentencePiece
+
+# Utilities
+tqdm==4.66.5
+psutil==6.0.0
+matplotlib
+jaxtyping
+typeguard
+roma
+
+# Cloud Storage
+cloudinary>=1.36.0

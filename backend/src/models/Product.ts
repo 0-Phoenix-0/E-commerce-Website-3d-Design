@@ -75,6 +75,11 @@ export interface IThreeDModel {
   textureResolution?: string | null;
   estimatedTime?: number | null;
   error?: string | null;
+  stageLabel?: string | null;
+  generationSettings?: {
+    quality: string;
+    textureResolution: string;
+  } | null;
   meshStats?: {
     vertices: number;
     faces: number;
@@ -166,6 +171,14 @@ const productSchema = new Schema<IProduct>(
         textureResolution: { type: String, default: null },
         estimatedTime: { type: Number, default: null },
         error: { type: String, default: null },
+        stageLabel: { type: String, default: null },
+        generationSettings: {
+          type: {
+            quality: { type: String },
+            textureResolution: { type: String }
+          },
+          default: null
+        },
         meshStats: {
           type: {
             vertices: { type: Number, default: 0 },
@@ -191,6 +204,8 @@ const productSchema = new Schema<IProduct>(
         textureResolution: null,
         estimatedTime: null,
         error: null,
+        stageLabel: null,
+        generationSettings: null,
         meshStats: null
       })
     }

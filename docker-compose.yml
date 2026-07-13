@@ -13,7 +13,7 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,9 +80,20 @@ services:
     restart: unless-stopped
     environment:
       PORT: 8000
-      BACKEND_URL: http://backend:5000
+      BACKEND_URL: https://shopco-backend-ct6z.onrender.com
       INTERNAL_SECRET: ${INTERNAL_SECRET:-three-d-ai-internal-bypass-key}
       AUTO_GENERATE_3D: ${AUTO_GENERATE_3D:-true}
+      # Cloudinary credentials for uploading generated GLB and preview files
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      # HuggingFace cache — points to the pytorch_cache named volume
+      HF_HOME: /root/.cache/huggingface
+      # Hunyuan3D weight cache — smart_load_model() looks here before HuggingFace Hub
+      # Resolves to: /app/weights/Hunyuan3D-2.1/hunyuan3d-dit-v2-1/
+      HY3DGEN_MODELS: /app/weights
+      # Storage path for generated GLBs and previews
+      STORAGE_PATH: /app/storage
     ports:
       - "8000:8000"
     volumes:
@@ -94,7 +105,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     networks:
       - ecommerce_net
 
