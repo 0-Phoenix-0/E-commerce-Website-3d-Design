@@ -165,7 +165,7 @@ export default function PriceHistoryChart({ product }: { product: Product }) {
               minTickGap={40}
             />
             <YAxis
-              tickFormatter={(v) => formatCents(v)}
+              tickFormatter={(v: number) => formatCents(v)}
               tick={{ fontSize: 11, fill: '#9ca3af' }}
               axisLine={false}
               tickLine={false}

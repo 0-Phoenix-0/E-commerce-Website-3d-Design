@@ -1,12 +1,7 @@
 'use client';
 
-<<<<<<< HEAD
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-=======
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
->>>>>>> d28d33f (AI service update)
 import Image from 'next/image';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -16,12 +11,8 @@ import { formatCents } from '@/lib/utils';
 import type { Product, ProductReview, ThreeDModel } from '@/types';
 import ProductCard from '@/components/ProductCard';
 import ThreeDViewer from '@/components/threeD/ThreeDViewer';
-<<<<<<< HEAD
-import ThreeDStatus from '@/components/threeD/ThreeDStatus';
 import TryOnModal from '@/components/tryOn/TryOnModal';
 import PriceHistoryChart from '@/components/PriceHistoryChart';
-=======
->>>>>>> d28d33f (AI service update)
 
 interface UploadSignData {
   timestamp: number;
@@ -69,12 +60,13 @@ export default function ProductDetailPage() {
   const [wishlisted, setWishlisted] = useState(false);
   const [togglingWishlist, setTogglingWishlist] = useState(false);
 
-<<<<<<< HEAD
   // Virtual Try-On Modal
   const [showTryOn, setShowTryOn] = useState(false);
-  
-  // Gallery, Zoom, Tabs
-  const [activeImageIdx, setActiveImageIdx] = useState(0);
+
+  // Gallery: activeView = number (image index) | '3d'
+  const [activeView, setActiveView] = useState<number | '3d'>(0);
+
+  // Fullscreen gallery state
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryZoom, setGalleryZoom] = useState(false);
   const galleryScrollRef = useRef<HTMLDivElement>(null);
@@ -94,14 +86,9 @@ export default function ProductDetailPage() {
       return next;
     });
   }
-  const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'priceHistory' | 'reviews' | 'shipping'>('description');
-=======
-  // Gallery: activeImageIdx = 0..N-1 for product images, 'threed' for the 3D viewer
-  const [activeView, setActiveView] = useState<number | '3d'>(0);
 
-  // Tabs
-  const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'reviews' | 'shipping' | '3d-options'>('description');
->>>>>>> d28d33f (AI service update)
+  // Tabs — includes Price History (HEAD) + 3D Options (d28d33f)
+  const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'priceHistory' | 'reviews' | 'shipping' | '3d-options'>('description');
   const [related, setRelated] = useState<Product[]>([]);
   const [copied, setCopied] = useState(false);
 
@@ -256,6 +243,49 @@ export default function ProductDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function handleOpenTryOn() {
+    if (!user) {
+      router.push(`/login?next=/products/${slug}`);
+      return;
+    }
+    setShowTryOn(true);
+  }
+
+  // Fullscreen gallery navigation
+  function openGallery(idx: number) {
+    setGalleryZoom(false);
+    setGalleryOpen(true);
+    setActiveView(idx);
+  }
+
+  function galleryStep(delta: number) {
+    setGalleryZoom(false);
+    setActiveView((prev) => {
+      if (typeof prev !== 'number') return 0;
+      const count = product?.images.length ?? 0;
+      if (count === 0) return prev;
+      return (prev + delta + count) % count;
+    });
+  }
+
+  // Keyboard nav + scroll lock for the fullscreen gallery
+  useEffect(() => {
+    if (!galleryOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setGalleryOpen(false);
+      else if (e.key === 'ArrowRight') galleryStep(1);
+      else if (e.key === 'ArrowLeft') galleryStep(-1);
+    }
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galleryOpen, product?.images.length]);
+
   // ── 3D Generation ─────────────────────────────────────────────────────────
   async function handleStartGeneration() {
     if (!product || generating3D) return;
@@ -345,170 +375,7 @@ export default function ProductDetailPage() {
     }
   }
 
-<<<<<<< HEAD
-  useEffect(() => {
-    api.get<Product>(`/products/slug/${slug}`).then((res) => {
-      if (res.success && res.data) {
-        setProduct(res.data);
-        setActiveImageIdx(0);
-      } else {
-        setNotFound(true);
-      }
-      setLoading(false);
-    });
-  }, [slug]);
-
-  // Load Related Products
-  useEffect(() => {
-    if (product) {
-      const catId = typeof product.category === 'object' ? product.category._id : product.category;
-      api.get<Product[]>(`/products?category=${catId}&limit=5`).then((res) => {
-        if (res.success && res.data) {
-          setRelated(res.data.filter((p) => p._id !== product._id).slice(0, 4));
-        }
-      });
-    }
-  }, [product]);
-
-  // Check wishlist status once product + user are loaded
-  useEffect(() => {
-    if (product && user) {
-      api.get<{ wishlisted: boolean }>(`/wishlist/check/${product._id}`).then((res) => {
-        if (res.success && res.data) setWishlisted(res.data.wishlisted);
-      });
-    }
-  }, [product, user]);
-
-  async function handleToggleWishlist() {
-    if (!user || !product) {
-      router.push(`/login?next=/products/${slug}`);
-      return;
-    }
-    setTogglingWishlist(true);
-    const res = await api.post<{ wishlisted: boolean }>(`/wishlist/${product._id}`, {});
-    if (res.success && res.data) setWishlisted(res.data.wishlisted);
-    setTogglingWishlist(false);
-  }
-
-  async function handleAddToCart() {
-    if (!user) {
-      router.push(`/login?next=/products/${slug}`);
-      return;
-    }
-    if (!product) return;
-
-    setAdding(true);
-    setCartMessage(null);
-    const error = await addToCart(product._id, quantity);
-    if (error) {
-      setCartMessage({ type: 'error', text: error });
-    } else {
-      setCartMessage({ type: 'success', text: 'Product added to your cart!' });
-      setTimeout(() => setCartMessage(null), 4000);
-    }
-    setAdding(false);
-  }
-
-  function handleShare() {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  function handleOpenTryOn() {
-    if (!user) {
-      router.push(`/login?next=/products/${slug}`);
-      return;
-    }
-    setShowTryOn(true);
-  }
-
-  // Fullscreen gallery navigation
-  function openGallery(idx: number) {
-    setActiveImageIdx(idx);
-    setGalleryZoom(false);
-    setGalleryOpen(true);
-  }
-
-  function galleryStep(delta: number) {
-    setGalleryZoom(false);
-    setActiveImageIdx((prev) => {
-      const count = product?.images.length ?? 0;
-      if (count === 0) return prev;
-      return (prev + delta + count) % count;
-    });
-  }
-
-  // Keyboard nav + scroll lock for the fullscreen gallery
-  useEffect(() => {
-    if (!galleryOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setGalleryOpen(false);
-      else if (e.key === 'ArrowRight') galleryStep(1);
-      else if (e.key === 'ArrowLeft') galleryStep(-1);
-    }
-    window.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [galleryOpen, product?.images.length]);
-
-  // Poll 3D model status if currently processing
-  useEffect(() => {
-    if (!product || product.threeD?.status !== 'processing') return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await api.get<Product>(`/products/slug/${slug}`);
-        if (res.success && res.data) {
-          if (
-            res.data.threeD?.status !== product.threeD?.status ||
-            res.data.threeD?.estimatedTime !== product.threeD?.estimatedTime ||
-            res.data.threeD?.modelUrl !== product.threeD?.modelUrl
-          ) {
-            setProduct(res.data);
-          }
-        }
-      } catch (err) {
-        console.error('Error polling 3D generation status:', err);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [product, slug]);
-
-  async function handleStartOnDemand3D() {
-    if (!product) return;
-    try {
-      const res = await api.post<any>(`/products/${product._id}/3d/generate`, {});
-      if (res.success && res.data) {
-        setProduct({
-          ...product,
-          threeD: res.data
-        });
-      }
-    } catch (err) {
-      console.error('Failed to trigger on-demand generation:', err);
-    }
-  }
-
-  const calcThreeDProgress = () => {
-    if (!product?.threeD) return 0;
-    if (product.threeD.status === 'ready') return 100;
-    if (product.threeD.status !== 'processing') return 0;
-    const est = product.threeD.estimatedTime ?? 30;
-    const ratio = Math.max(0, Math.min(1, (30 - est) / 30));
-    return Math.round(10 + ratio * 85);
-  };
-
-  // Loading skeleton
-=======
   // ── Loading skeleton ───────────────────────────────────────────────────────
->>>>>>> d28d33f (AI service update)
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-pulse">
@@ -560,11 +427,10 @@ export default function ProductDetailPage() {
   const has3DReady = threeD?.status === 'ready' && !!threeD?.modelUrl;
   const has3DProcessing = threeD?.status === 'processing';
   const has3DFailed = threeD?.status === 'failed';
-  const has3DAny = has3DReady || has3DProcessing || has3DFailed;
 
-  // Current image shown in main area (when activeView is a number)
-  const currentImageIdx = typeof activeView === 'number' ? activeView : 0;
-  const currentImage = images[currentImageIdx];
+  // Current image index shown in main area (when activeView is a number)
+  const activeImageIdx = typeof activeView === 'number' ? activeView : 0;
+  const currentImage = images[activeImageIdx];
 
   const specs = [
     { label: 'Brand', value: brandName },
@@ -613,10 +479,11 @@ export default function ProductDetailPage() {
   // Stage label from DB or derived from progress
   const currentStageLabel = threeD?.stageLabel || (has3DProcessing ? 'Processing...' : has3DReady ? 'Completed' : 'Not Started');
 
-  // Tab definitions (conditionally include '3d-options')
+  // Tab definitions — conditionally include '3d-options' (not shown when model ready)
   const tabs = [
     { id: 'description' as const, label: 'Description' },
     { id: 'specifications' as const, label: 'Specifications' },
+    { id: 'priceHistory' as const, label: 'Price History' },
     { id: 'reviews' as const, label: 'Reviews' },
     { id: 'shipping' as const, label: 'Shipping & Returns' },
     ...(!has3DReady ? [{ id: '3d-options' as const, label: '3D Options' }] : []),
@@ -646,11 +513,6 @@ export default function ProductDetailPage() {
 
           {/* Left Column: Interactive Media Gallery */}
           <div className="space-y-4">
-<<<<<<< HEAD
-            {/* Main Media container with Zoom hover */}
-            <div className="product-media-surface relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
-              {currentImage.url ? (
-=======
 
             {/* Main Media Area */}
             <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50 border border-gray-150 group">
@@ -663,7 +525,6 @@ export default function ProductDetailPage() {
                   />
                 </div>
               ) : currentImage.url ? (
->>>>>>> d28d33f (AI service update)
                 currentImage.type === 'video' ? (
                   <video
                     src={currentImage.url}
@@ -710,51 +571,10 @@ export default function ProductDetailPage() {
                 </span>
               )}
 
-<<<<<<< HEAD
-            {/* Thumbnail list */}
-            {images.length > 1 && (
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {images.map((img, idx) => {
-                  const isVideo = img.type === 'video';
-                  return (
-                    <button
-                      key={img.publicId}
-                      onClick={() => setActiveImageIdx(idx)}
-                      className={`product-media-surface relative w-20 h-20 rounded-xl overflow-hidden border shrink-0 bg-gray-50 transition-all ${
-                        activeImageIdx === idx
-                          ? 'border-gray-950 ring-2 ring-gray-950/10'
-                          : 'border-gray-200 hover:border-gray-400'
-                      }`}
-                    >
-                      {isVideo ? (
-                        <>
-                          <video src={img.url} className="w-full h-full object-cover pointer-events-none" muted />
-                          <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
-                            <svg className="w-6 h-6 text-white fill-current" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          </div>
-                        </>
-                      ) : (
-                        <Image src={img.url} alt="" fill className="object-cover" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* 3D Viewer Section */}
-            <div className="mt-8 pt-6 border-t border-gray-150">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-=======
               {/* 3D view badge */}
               {activeView === '3d' && (
                 <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5 bg-indigo-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
->>>>>>> d28d33f (AI service update)
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
                   </svg>
                   Interactive 3D
@@ -878,8 +698,7 @@ export default function ProductDetailPage() {
               <StockBadge stock={product.stock} />
             </div>
 
-<<<<<<< HEAD
-            {/* Price history / forecast quick link */}
+            {/* Price history quick link */}
             <button
               onClick={() => {
                 setActiveTab('priceHistory');
@@ -893,10 +712,7 @@ export default function ProductDetailPage() {
               View price history &amp; forecast
             </button>
 
-            {/* Key product info list (Brand, Warranty, Shipping, return, min quantity, availability status) */}
-=======
             {/* Key Info Grid */}
->>>>>>> d28d33f (AI service update)
             <div className="grid grid-cols-2 gap-4 border-t border-b border-gray-100 py-4 mb-6 text-xs sm:text-sm text-gray-600">
               {brandName && (
                 <div>
@@ -1027,7 +843,6 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-<<<<<<< HEAD
             {/* Virtual Try-On button */}
             <button
               onClick={handleOpenTryOn}
@@ -1039,16 +854,13 @@ export default function ProductDetailPage() {
               {user ? 'Try It On Yourself' : 'Sign in to Try It On'}
             </button>
 
-            {/* Share link and Shipping status */}
-=======
             {/* Share */}
->>>>>>> d28d33f (AI service update)
             <div className="mt-6 flex flex-wrap items-center justify-between border-t border-gray-100 pt-5 gap-4">
               <span className="text-xs text-gray-400 flex items-center gap-1.5 font-semibold">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
                 </svg>
-                Free shipping on orders over ₹7,164
+                Free shipping on orders over $75
               </span>
 
               <button
@@ -1065,27 +877,11 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-<<<<<<< HEAD
-        {/* Tabbed Specs, Description, and Reviews */}
+        {/* ── Tabbed Section ─────────────────────────────────────────────────── */}
         <div id="product-tabs" className="mt-16 border-t border-gray-150 pt-10">
           <div className="flex border-b border-gray-100 mb-8 overflow-x-auto">
             <div className="flex space-x-8">
-              {(
-                [
-                  { id: 'description', label: 'Description' },
-                  { id: 'specifications', label: 'Specifications' },
-                  { id: 'priceHistory', label: 'Price History' },
-                  { id: 'reviews', label: 'Reviews' },
-                  { id: 'shipping', label: 'Shipping & Returns' },
-                ] as const
-              ).map((tab) => (
-=======
-        {/* ── Tabbed Section ─────────────────────────────────────────────────── */}
-        <div className="mt-16 border-t border-gray-150 pt-10">
-          <div className="flex border-b border-gray-100 mb-8 overflow-x-auto">
-            <div className="flex space-x-8">
               {tabs.map((tab) => (
->>>>>>> d28d33f (AI service update)
                 <button
                   key={tab.id}
                   id={`tab-${tab.id}`}
@@ -1131,14 +927,12 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-<<<<<<< HEAD
+            {/* Price History Tab */}
             {activeTab === 'priceHistory' && (
               <PriceHistoryChart product={product} />
             )}
 
-=======
             {/* Reviews Tab */}
->>>>>>> d28d33f (AI service update)
             {activeTab === 'reviews' && (
               <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 rounded-2xl p-6 border border-gray-150">
@@ -1299,21 +1093,15 @@ export default function ProductDetailPage() {
             {/* Shipping Tab */}
             {activeTab === 'shipping' && (
               <div className="space-y-4">
-                <p className="font-semibold text-gray-900 text-base">Shipping & Returns Information</p>
+                <p className="font-semibold text-gray-900 text-base">Shipping &amp; Returns Information</p>
                 <div className="text-gray-500 space-y-2">
-<<<<<<< HEAD
                   {product.shippingInformation && (
                     <p>• <strong>Shipping Info:</strong> {product.shippingInformation}</p>
                   )}
                   {product.returnPolicy && (
                     <p>• <strong>Return Policy:</strong> {product.returnPolicy}</p>
                   )}
-                  <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding ₹7,164.</p>
-=======
-                  {product.shippingInformation && <p>• <strong>Shipping Info:</strong> {product.shippingInformation}</p>}
-                  {product.returnPolicy && <p>• <strong>Return Policy:</strong> {product.returnPolicy}</p>}
                   <p>• <strong>Free standard delivery</strong> is automatically applied to all orders value exceeding $75.</p>
->>>>>>> d28d33f (AI service update)
                   <p>• Standard shipping takes approximately 3-5 business days depending on delivery address.</p>
                   <p>• We offer a comprehensive <strong>30-day return policy</strong>. Items must be returned in their original packaging and condition to qualify for standard refunds.</p>
                 </div>
@@ -1563,7 +1351,7 @@ export default function ProductDetailPage() {
                     key={img.publicId}
                     onClick={() => {
                       setGalleryZoom(false);
-                      setActiveImageIdx(idx);
+                      setActiveView(idx);
                     }}
                     className={`relative w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-colors ${
                       activeImageIdx === idx ? 'border-white' : 'border-white/25 hover:border-white/60'
